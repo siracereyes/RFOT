@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Criterion, Participant } from '../types';
-import { Save, User as UserIcon, Sparkles, Loader2, MessageSquareQuote } from 'lucide-react';
+import { Save, User as UserIcon, Sparkles, Loader2, MessageSquareQuote, Info } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
 interface ScoreCardProps {
@@ -63,32 +63,42 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, 
   };
 
   return (
-    <div className="glass-card rounded-3xl overflow-hidden border border-white/10 shadow-2xl transition-all hover:border-blue-500/30 group">
-      <div className="p-6 bg-gradient-to-r from-blue-600/10 to-transparent border-b border-white/10">
+    <div className="glass-card rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl transition-all hover:border-blue-500/30 group">
+      <div className="p-8 bg-gradient-to-r from-blue-600/10 to-transparent border-b border-white/10">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform">
-              <UserIcon size={28} className="text-blue-400" />
+          <div className="flex items-center gap-5">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform">
+              <UserIcon size={32} className="text-blue-400" />
             </div>
             <div>
-              <h4 className="text-xl font-bold font-header tracking-tight">{participant.name}</h4>
-              <p className="text-xs text-slate-400 uppercase tracking-widest font-bold">{participant.district}</p>
+              <h4 className="text-2xl font-black font-header tracking-tight">{participant.name}</h4>
+              <p className="text-[10px] text-slate-500 uppercase tracking-[0.3em] font-black mt-1">{participant.district}</p>
             </div>
           </div>
           <div className="text-right">
-             <div className="text-3xl font-black text-blue-400 font-header">{total.toFixed(1)}</div>
-             <div className="text-[10px] text-slate-500 uppercase font-black">Points Total</div>
+             <div className="text-4xl font-black text-blue-400 font-header drop-shadow-sm">{total.toFixed(1)}</div>
+             <div className="text-[10px] text-slate-600 uppercase font-black tracking-widest mt-1">Weighted Points</div>
           </div>
         </div>
       </div>
 
-      <div className="p-6 space-y-8">
-        <div className="grid grid-cols-1 gap-6">
+      <div className="p-8 space-y-10">
+        <div className="grid grid-cols-1 gap-8">
           {criteria.map((c) => (
-            <div key={c.id} className="space-y-3">
-              <div className="flex justify-between items-end">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">{c.name}</label>
-                <span className="text-xs font-bold text-blue-400/80">Max {c.weight}</span>
+            <div key={c.id} className="space-y-4">
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                    {c.name}
+                    {c.description && <Info size={12} className="text-blue-400 opacity-60" title={c.description} />}
+                  </label>
+                  {c.description && (
+                    <p className="text-[10px] text-slate-500 leading-relaxed max-w-[80%] italic">
+                      {c.description}
+                    </p>
+                  )}
+                </div>
+                <span className="text-[10px] font-bold text-blue-500/60 bg-blue-500/5 px-2 py-1 rounded">Max {c.weight}</span>
               </div>
               <div className="relative">
                 <input
@@ -97,12 +107,12 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, 
                   value={scores[c.id] || ''}
                   onChange={(e) => handleScoreChange(c.id, e.target.value, c.weight)}
                   placeholder={`0.0`}
-                  className={`w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-3xl font-black text-center focus:border-blue-500/50 outline-none transition-all placeholder:text-slate-800 ${
+                  className={`w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-center focus:border-blue-500/50 outline-none transition-all placeholder:text-slate-800 ${
                     isLocked ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 />
                 <div 
-                  className="absolute bottom-0 left-0 h-1 bg-blue-500/30 rounded-full transition-all duration-500" 
+                  className="absolute bottom-0 left-0 h-1.5 bg-blue-500/30 rounded-full transition-all duration-500" 
                   style={{ width: `${((scores[c.id] || 0) / c.weight) * 100}%` }}
                 />
               </div>
@@ -110,46 +120,46 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, 
           ))}
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <label className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-              <MessageSquareQuote size={14} /> Judge's Critique
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+              <MessageSquareQuote size={14} /> Evaluation Comments
             </label>
             <button 
               onClick={generateCritique}
               disabled={isLocked || isGenerating}
-              className="text-[10px] font-black uppercase tracking-widest text-blue-400 hover:text-blue-300 flex items-center gap-1 bg-blue-400/10 px-2 py-1 rounded transition-colors disabled:opacity-30"
+              className="text-[10px] font-black uppercase tracking-widest text-blue-400 hover:text-blue-300 flex items-center gap-2 bg-blue-400/10 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-30 shadow-sm"
             >
               {isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-              {isGenerating ? 'Analyzing...' : 'AI Assistant'}
+              {isGenerating ? 'Drafting...' : 'AI Drafting'}
             </button>
           </div>
           <textarea
             value={critique}
             onChange={(e) => setCritique(e.target.value)}
             disabled={isLocked}
-            placeholder="Enter comments or use AI assistant..."
-            className="w-full h-24 bg-white/5 border border-white/10 rounded-2xl p-4 text-sm text-slate-300 focus:border-blue-500/50 outline-none resize-none transition-all"
+            placeholder="Describe strengths and areas for improvement..."
+            className="w-full h-32 bg-white/5 border border-white/10 rounded-2xl p-5 text-sm text-slate-300 focus:border-blue-500/50 outline-none resize-none transition-all placeholder:text-slate-700 leading-relaxed"
           />
         </div>
 
         <button
           disabled={isLocked}
           onClick={() => onSave(scores, critique)}
-          className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-sm flex items-center justify-center gap-3 transition-all ${
+          className={`w-full py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all ${
             isLocked 
-              ? 'bg-slate-800 text-slate-600 cursor-not-allowed' 
-              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-xl shadow-blue-500/20 active:scale-[0.98]'
+              ? 'bg-slate-900 text-slate-600 cursor-not-allowed border border-white/5' 
+              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-2xl shadow-blue-600/30 active:scale-[0.98]'
           }`}
         >
-          <Save size={18} />
-          Finalize Scoresheet
+          <Save size={20} />
+          Submit Evaluation Ballot
         </button>
       </div>
       
       {isLocked && (
-        <div className="py-2 bg-red-500/10 text-red-400 text-center text-[10px] font-black border-t border-red-500/20 tracking-[0.2em] uppercase">
-          Locked by Administrator
+        <div className="py-3 bg-red-500/10 text-red-400 text-center text-[10px] font-black border-t border-red-500/20 tracking-[0.3em] uppercase">
+          Locked for Modification
         </div>
       )}
     </div>

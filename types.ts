@@ -14,6 +14,7 @@ export interface Criterion {
   id: string;
   name: string;
   weight: number;
+  description?: string; // Guidance for judges
 }
 
 export interface Round {
@@ -28,6 +29,8 @@ export interface Event {
   type: EventType;
   criteria: Criterion[];
   rounds?: Round[];
+  numRounds?: number; // Quiz Bee specific
+  hasTieBreak?: boolean; // Quiz Bee specific
   isLocked: boolean;
   eventAdminId: string;
 }
