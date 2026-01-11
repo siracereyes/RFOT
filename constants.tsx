@@ -1,7 +1,26 @@
 
 import React from 'react';
 import { UserRole, User, Event, Participant } from './types';
-import { LayoutDashboard, Award, Users, Trophy } from 'lucide-react';
+import { LayoutDashboard, Award, Users, Trophy, BarChart3 } from 'lucide-react';
+
+export const SDO_LIST = [
+  "SDO Caloocan",
+  "SDO Las Piñas",
+  "SDO Makati",
+  "SDO Malabon",
+  "SDO Mandaluyong",
+  "SDO Manila",
+  "SDO Marikina",
+  "SDO Muntinlupa",
+  "SDO Navotas",
+  "SDO Parañaque",
+  "SDO Pasay",
+  "SDO Pasig",
+  "SDO Quezon",
+  "SDO San Juan",
+  "SDO Taguig and Pateros",
+  "SDO Valenzuela"
+];
 
 export const MOCK_USER: User = {
   id: 'u1',
@@ -10,7 +29,6 @@ export const MOCK_USER: User = {
   email: 'admin@rfot.gov.ph'
 };
 
-// Start with empty arrays for a clean slate
 export const MOCK_EVENTS: Event[] = [];
 export const MOCK_PARTICIPANTS: Participant[] = [];
 
