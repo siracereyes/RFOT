@@ -1,18 +1,21 @@
 
 import React, { useState } from 'react';
 import ScoreCard from '../components/ScoreCard';
-import { Search, Filter, CheckCircle, Award } from 'lucide-react';
-import { Event, Participant } from '../types';
+import { Search, Filter, CheckCircle, Award, LayoutGrid, List } from 'lucide-react';
+import { Event, Participant, Score } from '../types';
 
 interface JudgeDashboardProps {
   events: Event[];
   participants: Participant[];
+  judgeId: string;
+  scores: Score[];
+  onSubmitScore: (score: Score) => void;
 }
 
-const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants }) => {
+const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, judgeId, scores, onSubmitScore }) => {
   const [selectedEventId, setSelectedEventId] = useState<string>(events.length > 0 ? events[0].id : '');
   const [searchTerm, setSearchTerm] = useState('');
-  const [submittedIds, setSubmittedIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const currentEvent = events.find(e => e.id === selectedEventId);
   
@@ -23,101 +26,125 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants })
     )
   );
 
-  const handleSaveScore = (participantId: string, scores: Record<string, number>) => {
-    // In a real app, this would hit the API and save to MongoDB
-    console.log('Saving scores for', participantId, scores);
-    setSubmittedIds(new Set([...submittedIds, participantId]));
-    alert('Scores submitted successfully!');
+  const handleSaveScore = (participantId: string, criteriaScores: Record<string, number>, critique?: string) => {
+    const totalScore = Object.values(criteriaScores).reduce((sum, s) => sum + s, 0);
+    
+    const newScore: Score = {
+      id: `${judgeId}_${participantId}`,
+      judgeId,
+      participantId,
+      eventId: selectedEventId,
+      criteriaScores,
+      totalScore,
+      critique
+    };
+
+    onSubmitScore(newScore);
+    alert('Ballot submitted and recorded successfully.');
+  };
+
+  const getParticipantScore = (participantId: string) => {
+    return scores.find(s => s.participantId === participantId && s.judgeId === judgeId);
   };
 
   if (events.length === 0) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-6 text-center">
-        <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center text-slate-500">
-          <Award size={40} />
+        <div className="w-24 h-24 rounded-3xl bg-slate-900 border border-white/5 flex items-center justify-center text-slate-700 animate-float">
+          <Award size={48} />
         </div>
         <div className="space-y-2">
-          <h2 className="text-2xl font-bold">No Events Available</h2>
-          <p className="text-slate-400 max-w-md">There are no events currently set up in the system. Please wait for an administrator to create an event and enroll participants.</p>
+          <h2 className="text-3xl font-black font-header tracking-tight">No Active Events</h2>
+          <p className="text-slate-500 max-w-sm mx-auto">The judging panel is awaiting event assignment from the festival administrator.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="text-center md:text-left">
-          <h1 className="text-3xl font-black font-header tracking-tight">Judging Panel</h1>
-          <p className="text-slate-400 mt-1">Submit scores for participants in real-time.</p>
+    <div className="space-y-10 max-w-6xl mx-auto pb-24">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 text-blue-400 font-black text-xs tracking-widest uppercase">
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+            Judging Session Active
+          </div>
+          <h1 className="text-4xl font-black font-header tracking-tighter">Evaluation Panel</h1>
+          <p className="text-slate-400 font-medium">Regional Festival of Talents Scoring Gateway</p>
         </div>
         
-        <div className="flex flex-col gap-2">
-          <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Active Event</label>
-          <select 
-            value={selectedEventId}
-            onChange={(e) => setSelectedEventId(e.target.value)}
-            className="bg-slate-900 border border-white/10 rounded-xl px-4 py-2 outline-none focus:border-blue-500 min-w-[240px]"
-          >
-            {events.map(e => (
-              <option key={e.id} value={e.id}>{e.name}</option>
-            ))}
-          </select>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Current Contest</label>
+            <select 
+              value={selectedEventId}
+              onChange={(e) => setSelectedEventId(e.target.value)}
+              className="bg-slate-900 border border-white/10 rounded-2xl px-5 py-3 outline-none focus:border-blue-500/50 min-w-[280px] font-bold text-slate-200 appearance-none shadow-xl"
+            >
+              {events.map(e => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end gap-2">
+            <button 
+              onClick={() => setViewMode('grid')}
+              className={`p-3.5 rounded-2xl transition-all ${viewMode === 'grid' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white/5 text-slate-500 hover:text-white'}`}
+            >
+              <LayoutGrid size={20} />
+            </button>
+            <button 
+              onClick={() => setViewMode('list')}
+              className={`p-3.5 rounded-2xl transition-all ${viewMode === 'list' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white/5 text-slate-500 hover:text-white'}`}
+            >
+              <List size={20} />
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="flex gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+        <div className="flex-1 relative group">
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors" size={22} />
           <input 
             type="text" 
-            placeholder="Search participant or district..."
+            placeholder="Search contestants by name or school district..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-blue-500 transition-all text-lg"
+            className="w-full bg-slate-900 border border-white/10 rounded-3xl py-6 pl-16 pr-6 outline-none focus:border-blue-500/30 transition-all text-xl font-medium shadow-2xl placeholder:text-slate-700"
           />
         </div>
-        <button className="p-4 bg-white/5 border border-white/10 rounded-2xl text-slate-400 hover:text-white transition-colors">
-          <Filter size={24} />
-        </button>
       </div>
 
       {filteredParticipants.length === 0 ? (
-        <div className="glass p-12 rounded-3xl border border-white/10 text-center text-slate-500 italic">
-          No participants enrolled for this event yet.
+        <div className="glass p-20 rounded-[3rem] border border-white/10 text-center">
+          <p className="text-slate-600 italic text-lg font-medium">No results match your current filter.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {filteredParticipants.map(participant => (
-            <div key={participant.id} className="relative">
-              {submittedIds.has(participant.id) && (
-                <div className="absolute inset-0 z-10 glass rounded-2xl flex flex-col items-center justify-center backdrop-blur-md border border-emerald-500/30">
-                  <div className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center text-white mb-4 animate-bounce">
-                    <CheckCircle size={32} />
+        <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 gap-8" : "space-y-6"}>
+          {filteredParticipants.map(participant => {
+            const existingScore = getParticipantScore(participant.id);
+            return (
+              <div key={participant.id} className="relative group">
+                {currentEvent && (
+                  <ScoreCard 
+                    participant={participant} 
+                    criteria={currentEvent.criteria} 
+                    isLocked={currentEvent.isLocked} 
+                    initialScores={existingScore?.criteriaScores}
+                    initialCritique={existingScore?.critique}
+                    onSave={(scores, critique) => handleSaveScore(participant.id, scores, critique)}
+                  />
+                )}
+                {existingScore && (
+                  <div className="absolute top-4 right-4 z-10 px-3 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded-full flex items-center gap-1.5 backdrop-blur-md">
+                    <CheckCircle size={14} className="text-emerald-400" />
+                    <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Submitted</span>
                   </div>
-                  <p className="text-xl font-bold">Scored Successfully</p>
-                  <button 
-                    onClick={() => setSubmittedIds(prev => {
-                      const next = new Set(prev);
-                      next.delete(participant.id);
-                      return next;
-                    })}
-                    className="mt-4 text-emerald-400 font-semibold hover:underline"
-                  >
-                    Edit Scores
-                  </button>
-                </div>
-              )}
-              {currentEvent && (
-                <ScoreCard 
-                  participant={participant} 
-                  criteria={currentEvent.criteria} 
-                  isLocked={currentEvent.isLocked} 
-                  onSave={(scores) => handleSaveScore(participant.id, scores)}
-                />
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -18,7 +18,7 @@ export interface Criterion {
 
 export interface Round {
   id: string;
-  name: string; // Easy, Average, Difficult
+  name: string;
   points: number;
 }
 
@@ -46,6 +46,7 @@ export interface Score {
   eventId: string;
   criteriaScores: Record<string, number>; // criterionId -> score
   totalScore: number;
+  critique?: string;
 }
 
 export interface User {
