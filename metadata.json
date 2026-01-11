@@ -1,0 +1,8 @@
+{
+  "name": "RFOT Contest Scoring System",
+  "description": "A high-end, visually appealing contest scoring system for Regional Festival of Talents with real-time validation and multi-role dashboards.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
