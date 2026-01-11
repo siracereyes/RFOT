@@ -2,22 +2,25 @@
 import React, { useState } from 'react';
 import ScoreCard from '../components/ScoreCard';
 import { Search, Filter, CheckCircle, Award, LayoutGrid, List } from 'lucide-react';
-import { Event, Participant, Score } from '../types';
+import { Event, Participant, Score, User, UserRole } from '../types';
 
 interface JudgeDashboardProps {
   events: Event[];
   participants: Participant[];
-  judgeId: string;
+  judge: User;
   scores: Score[];
   onSubmitScore: (score: Score) => void;
 }
 
-const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, judgeId, scores, onSubmitScore }) => {
-  const [selectedEventId, setSelectedEventId] = useState<string>(events.length > 0 ? events[0].id : '');
+const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, judge, scores, onSubmitScore }) => {
+  // Filter events to only show the one assigned to the judge
+  const assignedEvents = events.filter(e => e.id === judge.assignedEventId);
+  
+  const [selectedEventId, setSelectedEventId] = useState<string>(assignedEvents.length > 0 ? assignedEvents[0].id : '');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  const currentEvent = events.find(e => e.id === selectedEventId);
+  const currentEvent = assignedEvents.find(e => e.id === selectedEventId);
   
   const filteredParticipants = participants.filter(p => 
     p.eventId === selectedEventId && (
@@ -30,8 +33,8 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
     const totalScore = Object.values(criteriaScores).reduce((sum, s) => sum + s, 0);
     
     const newScore: Score = {
-      id: `${judgeId}_${participantId}`,
-      judgeId,
+      id: `${judge.id}_${participantId}`,
+      judgeId: judge.id,
       participantId,
       eventId: selectedEventId,
       criteriaScores,
@@ -44,18 +47,18 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
   };
 
   const getParticipantScore = (participantId: string) => {
-    return scores.find(s => s.participantId === participantId && s.judgeId === judgeId);
+    return scores.find(s => s.participantId === participantId && s.judgeId === judge.id);
   };
 
-  if (events.length === 0) {
+  if (assignedEvents.length === 0) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-6 text-center">
         <div className="w-24 h-24 rounded-3xl bg-slate-900 border border-white/5 flex items-center justify-center text-slate-700 animate-float">
           <Award size={48} />
         </div>
         <div className="space-y-2">
-          <h2 className="text-3xl font-black font-header tracking-tight">No Active Events</h2>
-          <p className="text-slate-500 max-w-sm mx-auto">The judging panel is awaiting event assignment from the festival administrator.</p>
+          <h2 className="text-3xl font-black font-header tracking-tight">No Events Assigned</h2>
+          <p className="text-slate-500 max-w-sm mx-auto">Your account is active, but an administrator has not assigned you a competition category yet.</p>
         </div>
       </div>
     );
@@ -67,7 +70,7 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
         <div className="space-y-2">
           <div className="flex items-center gap-3 text-blue-400 font-black text-xs tracking-widest uppercase">
             <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-            Judging Session Active
+            Session Active: {judge.name}
           </div>
           <h1 className="text-4xl font-black font-header tracking-tighter">Evaluation Panel</h1>
           <p className="text-slate-400 font-medium">Regional Festival of Talents Scoring Gateway</p>
@@ -75,16 +78,11 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
         
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Current Contest</label>
-            <select 
-              value={selectedEventId}
-              onChange={(e) => setSelectedEventId(e.target.value)}
-              className="bg-slate-900 border border-white/10 rounded-2xl px-5 py-3 outline-none focus:border-blue-500/50 min-w-[280px] font-bold text-slate-200 appearance-none shadow-xl"
-            >
-              {events.map(e => (
-                <option key={e.id} value={e.id}>{e.name}</option>
-              ))}
-            </select>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Assigned Contest</label>
+            <div className="bg-slate-900 border border-white/10 rounded-2xl px-5 py-3 min-w-[280px] font-bold text-slate-200 shadow-xl flex items-center gap-2">
+              <Award size={18} className="text-blue-400" />
+              {currentEvent?.name || 'Loading...'}
+            </div>
           </div>
           <div className="flex items-end gap-2">
             <button 

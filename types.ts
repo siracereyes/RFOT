@@ -57,5 +57,6 @@ export interface User {
   name: string;
   role: UserRole;
   email: string;
+  password?: string; // Added for login
   assignedEventId?: string;
 }
