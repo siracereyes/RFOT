@@ -41,7 +41,8 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, 
     
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: (process.env as any).API_KEY });
+      // Fix: Use process.env.API_KEY directly as per guidelines
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `Act as a professional talent judge for the "Regional Festival of Talents". 
       The participant ${participant.name} from ${participant.district} received the following scores:
       ${criteria.map(c => `${c.name}: ${scores[c.id] || 0}/${c.weight}`).join(', ')}

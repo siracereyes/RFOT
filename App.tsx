@@ -113,7 +113,6 @@ const App: React.FC = () => {
 
   const removeJudge = (id: string) => {
     setUsers(prev => prev.filter(u => u.id !== id));
-    // Also remove their scores if needed, but usually kept for history
   };
 
   if (!currentUser) {
@@ -171,8 +170,8 @@ const App: React.FC = () => {
     <Router>
       <Layout user={currentUser} onLogout={handleLogout}>
         <Routes>
-          <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
-          <Route path="/events" element={<AdminDashboard events={events} participants={participants} users={users} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
+          <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
+          <Route path="/events" element={<AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
           <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={submitScore} />} />
           <Route path="/public" element={<PublicLeaderboard events={events} participants={participants} scores={scores} />} />
           <Route path="*" element={<Navigate to="/" />} />

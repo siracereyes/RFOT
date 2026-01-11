@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Trophy, Medal, Star, LayoutTemplate, Users, Sparkles, Volume2, Loader2 } from 'lucide-react';
-import { Event, Participant, Score } from '../types';
-import { GoogleGenAI } from '@google/genai';
+import { Trophy, Medal, Star, LayoutTemplate, Users, Sparkles, Volume2, Loader2, Info } from 'lucide-react';
+import { Event, Participant, Score, EventType } from '../types';
+import { GoogleGenAI, Modality } from '@google/genai';
 
 interface PublicLeaderboardProps {
   events: Event[];
@@ -16,35 +16,97 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
 
+  // Sync selected event if list changes and current selection is invalid
+  useEffect(() => {
+    if (events.length > 0 && (!selectedEventId || !events.find(e => e.id === selectedEventId))) {
+      setSelectedEventId(events[0].id);
+    }
+  }, [events]);
+
   const currentEvent = events.find(e => e.id === selectedEventId);
   
   const rankings = useMemo(() => {
-    if (!selectedEventId) return [];
+    if (!selectedEventId || !currentEvent) return [];
     
-    return participants
-      .filter(p => p.eventId === selectedEventId)
-      .map(p => {
-        const participantScores = scores.filter(s => s.participantId === p.id && s.eventId === selectedEventId);
-        const averageScore = participantScores.length > 0 
-          ? participantScores.reduce((sum, s) => sum + s.totalScore, 0) / participantScores.length 
-          : 0;
-        return { ...p, score: averageScore };
-      })
-      .sort((a, b) => b.score - a.score);
-  }, [selectedEventId, participants, scores]);
+    const eventParticipants = participants.filter(p => p.eventId === selectedEventId);
+    const eventScores = scores.filter(s => s.eventId === selectedEventId);
+
+    if (currentEvent.type === EventType.QUIZ_BEE) {
+      // Quiz Bee: Simple Average/Total (Highest wins)
+      return eventParticipants
+        .map(p => {
+          const pScores = eventScores.filter(s => s.participantId === p.id);
+          const averageScore = pScores.length > 0 
+            ? pScores.reduce((sum, s) => sum + s.totalScore, 0) / pScores.length 
+            : 0;
+          return { ...p, score: averageScore, displayScore: averageScore.toFixed(2) };
+        })
+        .sort((a, b) => b.score - a.score);
+    } else {
+      // Judging: Sum of Ranks (Lowest Sum wins)
+      const judgeIds = [...new Set(eventScores.map(s => s.judgeId))] as string[];
+      
+      if (judgeIds.length === 0) {
+        return eventParticipants.map(p => ({ ...p, score: 0, rankSum: 0, displayScore: '0.00' }));
+      }
+
+      // Calculate ranks per judge
+      const judgeRanks: Record<string, Record<string, number>> = {};
+      // Fix: Explicitly cast judgeIds to string array to avoid unknown index errors
+      judgeIds.forEach(jId => {
+        const jScores = eventScores.filter(s => s.judgeId === jId);
+        const sortedScores = [...jScores].sort((a, b) => b.totalScore - a.totalScore);
+        
+        judgeRanks[jId] = {};
+        sortedScores.forEach((s, idx) => {
+          judgeRanks[jId][s.participantId] = idx + 1;
+        });
+
+        // Assign max rank to participants without a score from this judge
+        eventParticipants.forEach(p => {
+          if (!judgeRanks[jId][p.id]) {
+            judgeRanks[jId][p.id] = eventParticipants.length;
+          }
+        });
+      });
+
+      // Aggregate rank sums
+      return eventParticipants.map(p => {
+        let rankSum = 0;
+        judgeIds.forEach(jId => {
+          rankSum += judgeRanks[jId][p.id];
+        });
+
+        const pScores = eventScores.filter(s => s.participantId === p.id);
+        const avgRaw = pScores.length > 0 ? pScores.reduce((sum, s) => sum + s.totalScore, 0) / pScores.length : 0;
+
+        return {
+          ...p,
+          rankSum,
+          score: avgRaw, // Used as tie-breaker
+          displayScore: rankSum.toString(),
+          isRankSystem: true
+        };
+      }).sort((a, b) => {
+        if (a.rankSum !== b.rankSum) return a.rankSum - b.rankSum; // ASCENDING
+        return b.score - a.score; // DESCENDING raw tie-breaker
+      });
+    }
+  }, [selectedEventId, participants, scores, currentEvent]);
 
   useEffect(() => {
     const fetchInsight = async () => {
       if (rankings.length < 2 || isGeneratingInsight) return;
       setIsGeneratingInsight(true);
       try {
-        const ai = new GoogleGenAI({ apiKey: (process.env as any).API_KEY });
+        // Fix: Use process.env.API_KEY directly as per guidelines
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const top3 = rankings.slice(0, 3);
         const prompt = `You are a festival commentator for the RFOT 2024. 
         In the event "${currentEvent?.name}", the current leaders are: 
-        1. ${top3[0]?.name} (${top3[0]?.district}) - Score ${top3[0]?.score.toFixed(2)}
-        2. ${top3[1]?.name} (${top3[1]?.district}) - Score ${top3[1]?.score.toFixed(2)}
-        Briefly describe the intense competition in one punchy sentence for a large scoreboard display.`;
+        1. ${top3[0]?.name} (${top3[0]?.district})
+        2. ${top3[1]?.name} (${top3[1]?.district})
+        Briefly describe the competition in one punchy sentence (max 15 words).`;
 
         const response = await ai.models.generateContent({
           model: 'gemini-3-flash-preview',
@@ -59,28 +121,30 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
     };
 
     fetchInsight();
-  }, [selectedEventId, rankings.length > 0]);
+  }, [selectedEventId, rankings.length]);
 
   const announceWinners = async () => {
     if (rankings.length === 0) return;
     setIsAnnouncing(true);
     try {
       const topWinner = rankings[0];
-      const text = `The current champion for ${currentEvent?.name} is ${topWinner.name} from ${topWinner.district}, with an outstanding average score of ${topWinner.score.toFixed(2)} points. Congratulations to our top performer!`;
+      const detail = currentEvent?.type === EventType.JUDGING ? `a rank sum of ${topWinner.displayScore}` : `an average score of ${topWinner.displayScore}`;
+      const text = `The current champion for ${currentEvent?.name} is ${topWinner.name} from ${topWinner.district}, with ${detail}. Congratulations!`;
       
-      const ai = new GoogleGenAI({ apiKey: (process.env as any).API_KEY });
+      // Fix: Use process.env.API_KEY directly and use Modality.AUDIO enum
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text }] }],
         config: {
-          responseModalities: ['AUDIO'],
+          responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
           },
         },
       });
 
-      const base64Audio = (response as any).candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         const binaryString = atob(base64Audio);
@@ -117,19 +181,24 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
   }
 
   return (
-    <div className="min-h-screen p-6 lg:p-12 space-y-16 max-w-7xl mx-auto">
+    <div className="min-h-screen p-6 lg:p-12 space-y-16 max-w-7xl mx-auto pb-32">
       <div className="flex flex-col items-center space-y-8">
         <div className="text-center space-y-4">
           <div className="flex items-center justify-center gap-2 text-blue-400 font-black tracking-[0.4em] uppercase text-[10px]">
             <Sparkles size={12} /> Live Scoreboard <Sparkles size={12} />
           </div>
-          <h1 className="text-5xl lg:text-8xl font-black font-header tracking-tighter bg-gradient-to-b from-white via-white to-white/20 bg-clip-text text-transparent leading-none py-2">
+          <h1 className="text-4xl lg:text-7xl font-black font-header tracking-tighter bg-gradient-to-b from-white via-white to-white/20 bg-clip-text text-transparent leading-none py-2">
             {currentEvent?.name.toUpperCase() || 'SELECT CATEGORY'}
           </h1>
           {aiInsight && (
             <p className="text-lg font-medium text-blue-400/80 italic max-w-2xl mx-auto animate-in fade-in slide-in-from-top-4 duration-1000">
               "{aiInsight}"
             </p>
+          )}
+          {currentEvent?.type === EventType.JUDGING && (
+            <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-400/60 mt-4">
+              <Info size={12} /> Ranking System Active (Lowest Sum Wins)
+            </div>
           )}
         </div>
         
@@ -173,7 +242,7 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
                   </div>
                   <h3 className="text-2xl font-black mb-1">{rankings[1]?.name}</h3>
                   <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-8">{rankings[1]?.district}</p>
-                  <div className="text-6xl font-black text-slate-300 tracking-tighter">{rankings[1]?.score.toFixed(2)}</div>
+                  <div className="text-6xl font-black text-slate-300 tracking-tighter">{rankings[1]?.displayScore}</div>
                   <p className="text-[10px] font-black tracking-[0.3em] text-slate-500 mt-3 uppercase">Silver Medalist</p>
                 </>
               )}
@@ -191,7 +260,7 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
                   </div>
                   <h3 className="text-4xl font-black mb-1 tracking-tight">{rankings[0]?.name}</h3>
                   <p className="text-slate-400 font-bold text-xs uppercase tracking-[0.2em] mb-10">{rankings[0]?.district}</p>
-                  <div className="text-9xl font-black text-yellow-400 drop-shadow-[0_0_20px_rgba(250,204,21,0.5)] tracking-tighter">{rankings[0]?.score.toFixed(2)}</div>
+                  <div className="text-9xl font-black text-yellow-400 drop-shadow-[0_0_20px_rgba(250,204,21,0.5)] tracking-tighter">{rankings[0]?.displayScore}</div>
                   <p className="text-sm font-black tracking-[0.5em] text-yellow-500/80 mt-4 uppercase">Grand Champion</p>
                 </>
               )}
@@ -206,7 +275,7 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
                   </div>
                   <h3 className="text-xl font-black mb-1">{rankings[2]?.name}</h3>
                   <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-6">{rankings[2]?.district}</p>
-                  <div className="text-5xl font-black text-amber-600 tracking-tighter">{rankings[2]?.score.toFixed(2)}</div>
+                  <div className="text-5xl font-black text-amber-600 tracking-tighter">{rankings[2]?.displayScore}</div>
                   <p className="text-[10px] font-black tracking-[0.3em] text-amber-800 mt-2 uppercase">Bronze Medalist</p>
                 </>
               )}
@@ -220,7 +289,7 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
                   <th className="px-10 py-8 text-xs font-black uppercase tracking-[0.3em] text-slate-500">Rank</th>
                   <th className="px-10 py-8 text-xs font-black uppercase tracking-[0.3em] text-slate-500">Contestant</th>
                   <th className="px-10 py-8 text-xs font-black uppercase tracking-[0.3em] text-slate-500">District / Division</th>
-                  <th className="px-10 py-8 text-xs font-black uppercase tracking-[0.3em] text-slate-500 text-right">Final Average</th>
+                  <th className="px-10 py-8 text-xs font-black uppercase tracking-[0.3em] text-slate-500 text-right">{currentEvent?.type === EventType.JUDGING ? 'Rank Sum' : 'Final Average'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -240,7 +309,7 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
                     </td>
                     <td className="px-10 py-8 text-slate-400 font-bold text-sm uppercase tracking-widest">{rank.district}</td>
                     <td className="px-10 py-8 text-right font-black text-3xl text-blue-400 tracking-tighter">
-                      {rank.score > 0 ? rank.score.toFixed(2) : '--'}
+                      {rank.displayScore}
                     </td>
                   </tr>
                 ))}
