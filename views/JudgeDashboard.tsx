@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import ScoreCard from '../components/ScoreCard';
 import { Search, CheckCircle, Award, User, Clock, AlertCircle, Users, ArrowLeft, Filter } from 'lucide-react';
-import { Event, Participant, Score, User as UserType } from '../types';
+import { Event, Participant, Score, User as UserType, EventType } from '../types';
 
 interface JudgeDashboardProps {
   events: Event[];
@@ -63,9 +63,21 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
   };
 
   const handleSaveScore = async (participantId: string, criteriaScores: Record<string, number>, deductions: number, critique?: string) => {
+    if (!currentEvent) return;
     setIsSubmitting(true);
-    const rawTotal = Object.values(criteriaScores).reduce((sum, s) => sum + s, 0);
-    const totalScore = Math.max(0, rawTotal - deductions);
+    
+    // CRITICAL FIX: Calculate rawTotal by iterating through the current event's rounds/criteria.
+    // This ensures we ONLY sum valid, currently-existing fields and ignores orphaned data.
+    let rawTotal = 0;
+    if (currentEvent.type === EventType.QUIZ_BEE) {
+      const rounds = currentEvent.rounds || [];
+      rawTotal = rounds.reduce((sum, r) => sum + (Number(criteriaScores[r.id]) || 0), 0);
+    } else {
+      const criteria = currentEvent.criteria || [];
+      rawTotal = criteria.reduce((sum, c) => sum + (Number(criteriaScores[c.id]) || 0), 0);
+    }
+
+    const totalScore = Math.max(0, rawTotal - (Number(deductions) || 0));
     
     const newScore: Score = {
       id: '', 
@@ -213,7 +225,7 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
               </button>
 
               <ScoreCard 
-                key={selectedParticipant.id}
+                key={`${selectedParticipant.id}-${selectedEventId}`}
                 participant={selectedParticipant} 
                 criteria={currentEvent.criteria} 
                 rounds={currentEvent.rounds}

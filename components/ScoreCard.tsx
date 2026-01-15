@@ -26,7 +26,6 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
   initialCritique = '', 
   onSave 
 }) => {
-  // Ensure scores is always an object to prevent crashes
   const [scores, setScores] = useState<Record<string, number>>(initialScores || {});
   const [deductions, setDeductions] = useState<number>(initialDeductions);
   const [critique, setCritique] = useState(initialCritique);
@@ -35,7 +34,6 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
   
   const isQuizBee = type === EventType.QUIZ_BEE;
 
-  // Sync state if initial props change (e.g., when selecting different participants)
   useEffect(() => {
     setScores(initialScores || {});
     setDeductions(initialDeductions);
@@ -49,9 +47,10 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
     setHasUnsavedChanges(isScoresChanged || isDeductionsChanged || isCritiqueChanged);
   }, [scores, deductions, critique, initialScores, initialDeductions, initialCritique]);
 
+  // Robust summation strictly tied to defined rounds/criteria
   const rawTotal = isQuizBee 
-    ? (rounds || []).reduce((sum, r) => sum + (scores[r.id] || 0), 0)
-    : (criteria || []).reduce((sum, c) => sum + (scores[c.id] || 0), 0);
+    ? (rounds || []).reduce((sum, r) => sum + (Number(scores[r.id]) || 0), 0)
+    : (criteria || []).reduce((sum, c) => sum + (Number(scores[c.id]) || 0), 0);
 
   const total = Math.max(0, rawTotal - deductions);
 
@@ -105,7 +104,9 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
           <div className="text-center sm:text-right flex items-center gap-6 md:gap-8">
              <div className="h-12 md:h-16 w-px bg-white/5 hidden sm:block"></div>
              <div>
-                <div className={`text-5xl md:text-6xl font-black font-header tabular-nums tracking-tighter drop-shadow-[0_0_20px_rgba(59,130,246,0.2)] ${isLocked ? 'text-slate-500' : 'text-blue-400'}`}>{total.toFixed(isQuizBee ? 0 : 2)}</div>
+                <div className={`text-5xl md:text-6xl font-black font-header tabular-nums tracking-tighter drop-shadow-[0_0_20px_rgba(59,130,246,0.2)] ${isLocked ? 'text-slate-500' : 'text-blue-400'}`}>
+                  {isQuizBee ? Math.round(total) : total.toFixed(2)}
+                </div>
                 <div className="text-[9px] md:text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Calculated Score</div>
              </div>
           </div>
@@ -131,7 +132,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                         {r.isTieBreaker && <span className="shrink-0 bg-amber-500/20 text-amber-400 text-[8px] font-black uppercase px-2 py-0.5 rounded-full border border-amber-500/30">Clincher</span>}
                         <label className="text-xs font-bold text-slate-300 truncate">{r.name || 'Unnamed Round'}</label>
                       </div>
-                      <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Points: {r.points}</p>
+                      <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Max Pts: {r.points}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
