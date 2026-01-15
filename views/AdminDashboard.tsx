@@ -4,7 +4,7 @@ import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, C
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score } from '../types';
 import { SDO_LIST } from '../constants';
-import { supabase } from '../supabase';
+import { supabase, authClient } from '../supabase';
 
 interface AdminDashboardProps {
   events: Event[];
@@ -82,12 +82,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleCreateJudge = async () => {
     if (!judgeEmail || !judgePassword || !assignedEventId || !judgeName) return alert("Fill all details.");
     
-    // Warning: Supabase client-side signUp will switch the current session to the new user.
-    if (!confirm("Note: Creating a new judge account will automatically sign you out from your Admin session for security. You will need to log back in as Admin afterward. Continue?")) return;
-
     setIsSubmitting(true);
     
-    const { data, error } = await supabase.auth.signUp({
+    // Use authClient (non-persisting) to create the user account
+    // This prevents the Admin from being logged out
+    const { data, error } = await authClient.auth.signUp({
       email: judgeEmail,
       password: judgePassword,
       options: { 
@@ -100,10 +99,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
 
     if (error) {
-      alert(error.message);
+      alert("Auth Error: " + error.message);
       setIsSubmitting(false);
     } else if (data.user) {
-      // Profile Create
+      // Create the public profile using the primary Admin client
       await onAddJudge({
         id: data.user.id,
         name: judgeName,
@@ -111,15 +110,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         email: judgeEmail,
         assigned_event_id: assignedEventId
       });
-      alert("Judge account created. You have been signed out. Please log in again to manage more users.");
-      window.location.reload();
+      
+      alert(`Judge account for ${judgeName} created successfully. You remain logged in.`);
+      
+      // Reset judge form
+      setJudgeName('');
+      setJudgeEmail('');
+      setJudgePassword('');
+      setAssignedEventId('');
+      setShowJudgeModal(false);
+      setIsSubmitting(false);
     }
   };
 
   const handleChangeJudgePassword = async () => {
     if (!newJudgePass || !showPasswordModal) return;
     setIsSubmitting(true);
-    // Simulating admin change - in production this needs an Edge Function
     alert("Credential update request for " + showPasswordModal.name + " has been sent. In production, this requires the Supabase Admin API (Service Role).");
     setShowPasswordModal(null);
     setNewJudgePass('');
@@ -312,10 +318,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10">
             <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black font-header text-white">Register Judge</h3><button onClick={() => setShowJudgeModal(false)} className="text-slate-600 hover:text-white"><X /></button></div>
             
-            <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl mb-6 flex items-start gap-3">
-              <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
-              <p className="text-[10px] text-amber-200/70 font-bold uppercase tracking-widest leading-relaxed">
-                Caution: Creating an account will auto-switch the browser session. You will be signed out as Admin.
+            <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-2xl mb-6 flex items-start gap-3">
+              <ShieldCheck className="text-blue-500 shrink-0 mt-0.5" size={18} />
+              <p className="text-[10px] text-blue-200/70 font-bold uppercase tracking-widest leading-relaxed">
+                Background Registration: You will remain logged in as Admin while creating this account.
               </p>
             </div>
 
@@ -324,7 +330,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Email</label><input type="email" value={judgeEmail} onChange={e => setJudgeEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" /></div>
               <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Password</label><input type="password" value={judgePassword} onChange={e => setJudgePassword(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" /></div>
               <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Assign Event</label><select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-4 rounded-xl font-bold text-white outline-none"><option value="">Select Event</option>{events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
-              <button disabled={isSubmitting} onClick={handleCreateJudge} className="w-full bg-indigo-600 p-4 rounded-xl font-black uppercase tracking-widest text-white flex items-center justify-center gap-2">{isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />} Confirm & Create</button>
+              <button disabled={isSubmitting} onClick={handleCreateJudge} className="w-full bg-indigo-600 p-4 rounded-xl font-black uppercase tracking-widest text-white flex items-center justify-center gap-2">{isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />} Create Account</button>
             </div>
           </div>
         </div>

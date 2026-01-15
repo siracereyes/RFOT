@@ -84,7 +84,7 @@ const App: React.FC = () => {
     }
 
     try {
-      const { data: profile, error } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authSession.user.id)
@@ -106,15 +106,15 @@ const App: React.FC = () => {
         
         setCurrentUser(fallbackUser);
         
-        // Use a background task for profile creation to avoid blocking UI if DB is slow
+        // Background upsert
         supabase.from('profiles').upsert([{
           id: authSession.user.id,
           name: fallbackUser.name,
           role: fallbackUser.role,
           email: fallbackUser.email,
           assigned_event_id: fallbackUser.assignedEventId
-        }]).then(({ error: upsertError }) => {
-          if (upsertError) console.error("Profile upsert background error:", upsertError);
+        }]).then(({ error }) => {
+          if (error) console.error("Profile auto-sync error:", error);
         });
       }
     } catch (err) {
@@ -139,27 +139,19 @@ const App: React.FC = () => {
     initAttempted.current = true;
 
     const initApp = async () => {
-      // Hard safety timeout
-      const timeout = setTimeout(() => {
-        setLoading(false);
-      }, 8000);
-
       try {
         const { data: { session } } = await supabase.auth.getSession();
         await handleSessionChange(session);
       } catch (e) {
-        console.error("Initialization error:", e);
+        console.error("Auth init error:", e);
         setLoading(false);
-      } finally {
-        clearTimeout(timeout);
       }
     };
 
     initApp();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Re-run handleSessionChange for any significant event
-      if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'SIGNED_OUT') {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
         await handleSessionChange(session);
       }
     });
@@ -196,14 +188,12 @@ const App: React.FC = () => {
           options: { data: { role: UserRole.SUPER_ADMIN, name: 'Main Admin' } }
         });
         if (error) throw error;
-        // SIGNED_IN event will handle loading(false)
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: loginCreds.email,
           password: loginCreds.password,
         });
         if (error) throw error;
-        // SIGNED_IN event will handle loading(false)
       }
     } catch (error: any) {
       setAuthError(error.message);
