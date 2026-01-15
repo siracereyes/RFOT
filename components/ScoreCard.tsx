@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Criterion, Participant, EventType, Round } from '../types';
-import { Save, User as UserIcon, Sparkles, Loader2, MessageSquareQuote, Info, Hash } from 'lucide-react';
+import { Save, User as UserIcon, Sparkles, Loader2, MessageSquareQuote, Info, Hash, AlertTriangle } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
 interface ScoreCardProps {
@@ -11,8 +11,9 @@ interface ScoreCardProps {
   type: EventType;
   isLocked: boolean;
   initialScores?: Record<string, number>;
+  initialDeductions?: number;
   initialCritique?: string;
-  onSave: (scores: Record<string, number>, critique?: string) => Promise<void>;
+  onSave: (scores: Record<string, number>, deductions: number, critique?: string) => Promise<void>;
 }
 
 const ScoreCard: React.FC<ScoreCardProps> = ({ 
@@ -22,19 +23,23 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
   type, 
   isLocked, 
   initialScores = {}, 
+  initialDeductions = 0,
   initialCritique = '', 
   onSave 
 }) => {
   const [scores, setScores] = useState<Record<string, number>>(initialScores);
+  const [deductions, setDeductions] = useState<number>(initialDeductions);
   const [critique, setCritique] = useState(initialCritique);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
   const isQuizBee = type === EventType.QUIZ_BEE;
 
-  const total = isQuizBee 
+  const rawTotal = isQuizBee 
     ? rounds.reduce((sum, r) => sum + (scores[r.id] || 0), 0)
     : criteria.reduce((sum, c) => sum + (scores[c.id] || 0), 0);
+
+  const total = Math.max(0, rawTotal - deductions);
 
   const maxPossible = isQuizBee
     ? rounds.reduce((sum, r) => sum + r.points, 0)
@@ -54,7 +59,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
   const handleSaveInternal = async () => {
     setIsSaving(true);
     try {
-      await onSave(scores, critique);
+      await onSave(scores, deductions, critique);
     } finally {
       setIsSaving(false);
     }
@@ -70,12 +75,13 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `Act as a professional talent judge for the "Regional Festival of Talents". 
-      The participant ${participant.name} from ${participant.district} received the following scores in ${isQuizBee ? 'a Quiz Bee' : 'a Judging Event'}:
+      The participant ${participant.name} from ${participant.district} received the following scores:
       ${isQuizBee 
         ? rounds.map(r => `${r.name}: ${scores[r.id] || 0}/${r.points}`).join(', ')
         : criteria.map(c => `${c.name}: ${scores[c.id] || 0}/${c.weight}`).join(', ')
       }
-      Total Score: ${total.toFixed(2)}/${maxPossible}.
+      Deductions: ${deductions}.
+      Final Total Score: ${total.toFixed(2)}/${maxPossible}.
       Generate a professional, encouraging, and constructive critique (max 2 sentences).`;
 
       const response = await ai.models.generateContent({
@@ -107,7 +113,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
           </div>
           <div className="text-right">
              <div className="text-4xl font-black text-blue-400 font-header drop-shadow-sm">{total}</div>
-             <div className="text-[10px] text-slate-600 uppercase font-black tracking-widest mt-1">Total Points</div>
+             <div className="text-[10px] text-slate-600 uppercase font-black tracking-widest mt-1">Final Score</div>
           </div>
         </div>
       </div>
@@ -126,14 +132,14 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                     )}
                     <label className="text-xs font-black uppercase tracking-widest text-slate-300">{r.name}</label>
                   </div>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Max Score: {r.points}pts</p>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Points per Item: {r.points}</p>
                 </div>
                 <div className="w-24">
                   <input
                     type="number"
                     disabled={isLocked || isSaving}
                     value={scores[r.id] || ''}
-                    onChange={(e) => handleScoreChange(r.id, e.target.value, r.points)}
+                    onChange={(e) => handleScoreChange(r.id, e.target.value, 1000)} // High cap for quiz points
                     className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-2 text-xl font-black text-center text-white focus:border-blue-500 outline-none"
                     placeholder="0"
                   />
@@ -150,7 +156,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                       {c.description && <Info size={12} className="text-blue-400 opacity-60" title={c.description} />}
                     </label>
                   </div>
-                  <span className="text-[10px] font-bold text-blue-500/60 bg-blue-500/5 px-2 py-1 rounded">Max {c.weight}</span>
+                  <span className="text-[10px] font-bold text-blue-500/60 bg-blue-500/5 px-2 py-1 rounded">Max {c.weight}%</span>
                 </div>
                 <div className="relative">
                   <input
@@ -167,6 +173,25 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
               </div>
             ))
           )}
+        </div>
+
+        {/* Deduction Section */}
+        <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-[2rem] space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-black uppercase tracking-widest text-red-400 flex items-center gap-2">
+              <AlertTriangle size={14} /> Penalty / Deduction Clause
+            </label>
+            <span className="text-[10px] text-slate-500 font-bold">- points</span>
+          </div>
+          <input 
+            type="number"
+            disabled={isLocked || isSaving}
+            value={deductions || ''}
+            onChange={(e) => setDeductions(Math.max(0, parseFloat(e.target.value) || 0))}
+            placeholder="0"
+            className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-lg font-black text-red-400 focus:border-red-500/30 outline-none transition-all"
+          />
+          <p className="text-[9px] text-slate-600 italic">E.g., -1 pt per 30s overtime or prop violations.</p>
         </div>
 
         {!isQuizBee && (

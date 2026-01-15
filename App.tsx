@@ -44,6 +44,7 @@ const App: React.FC = () => {
     participantId: db.participant_id,
     eventId: db.event_id,
     criteriaScores: db.criteria_scores || {},
+    deductions: db.deductions || 0,
     totalScore: db.total_score || 0,
     critique: db.critique
   });
@@ -263,7 +264,15 @@ const App: React.FC = () => {
             <Route path="/events" element={<Navigate to="/" />} />
             <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={async (s) => {
               const { data: existing } = await supabase.from('scores').select('id').eq('judge_id', s.judgeId).eq('participant_id', s.participantId).maybeSingle();
-              const payload: any = { judge_id: s.judgeId, participant_id: s.participantId, event_id: s.eventId, criteria_scores: s.criteriaScores, total_score: s.totalScore, critique: s.critique };
+              const payload: any = { 
+                judge_id: s.judgeId, 
+                participant_id: s.participantId, 
+                event_id: s.eventId, 
+                criteria_scores: s.criteriaScores, 
+                deductions: s.deductions,
+                total_score: s.totalScore, 
+                critique: s.critique 
+              };
               if (existing?.id) payload.id = existing.id;
               const { data, error } = await supabase.from('scores').upsert(payload).select();
               if (error) throw error;

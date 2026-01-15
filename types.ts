@@ -49,6 +49,7 @@ export interface Score {
   participantId: string;
   eventId: string;
   criteriaScores: Record<string, number>; // criterionId -> score OR roundId -> score
+  deductions: number;
   totalScore: number;
   critique?: string;
 }

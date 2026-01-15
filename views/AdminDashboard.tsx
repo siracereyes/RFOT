@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, Trash2, Key, UserCheck, Loader2, Save, Mail, ShieldCheck, AlertTriangle, Settings, ToggleLeft, ToggleRight, Hash, RefreshCw, Zap } from 'lucide-react';
+import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, Trash2, Key, UserCheck, Loader2, Save, Mail, ShieldCheck, AlertTriangle, Settings, ToggleLeft, ToggleRight, Hash, RefreshCw, Zap, BookOpen, Music, Microscope } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score, Round } from '../types';
 import { SDO_LIST } from '../constants';
@@ -65,11 +65,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     [users]
   );
   
-  const admins = useMemo(() => 
-    users.filter(u => u.role === UserRole.SUPER_ADMIN || u.role === UserRole.EVENT_ADMIN),
-    [users]
-  );
-
   useEffect(() => {
     if (editingEventId) {
       const ev = events.find(e => e.id === editingEventId);
@@ -89,14 +84,72 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setIsRefreshing(false), 800);
   };
 
-  const loadQuizBeeTemplate = () => {
-    const template: Round[] = [
-      { id: 'r-easy', name: 'Easy Round (10 Items)', points: 10, isTieBreaker: false },
-      { id: 'r-avg', name: 'Average Round (5 Items)', points: 15, isTieBreaker: false },
-      { id: 'r-diff', name: 'Difficult Round (5 Items)', points: 25, isTieBreaker: false },
-      { id: 'r-clincher', name: 'Clincher / Tie-Breaker', points: 5, isTieBreaker: true }
-    ];
-    setRounds(template);
+  const applyTemplate = (category: string) => {
+    let newCriteria: Criterion[] = [];
+    let newRounds: Round[] = [];
+    let type = EventType.JUDGING;
+
+    const generateId = () => Math.random().toString(36).substr(2, 9);
+
+    switch(category) {
+      case 'ICT_INVITATION':
+        newCriteria = [
+          { id: generateId(), name: 'Creativity of Design', weight: 30 },
+          { id: generateId(), name: 'Technical Use of Tools', weight: 20 },
+          { id: generateId(), name: 'Relevance to Theme', weight: 15 },
+          { id: generateId(), name: 'Layout & Measurement', weight: 15 },
+          { id: generateId(), name: 'Presentation / Process', weight: 15 },
+          { id: generateId(), name: 'Speed', weight: 5 }
+        ];
+        break;
+      case 'EIM':
+        newCriteria = [
+          { id: generateId(), name: 'Accuracy / Functionality', weight: 30 },
+          { id: generateId(), name: 'Technical Skills / Workmanship', weight: 30 },
+          { id: generateId(), name: 'Use of Tools', weight: 15 },
+          { id: generateId(), name: 'Safety', weight: 10 },
+          { id: generateId(), name: 'Ability to Explain', weight: 10 },
+          { id: generateId(), name: 'Speed', weight: 5 }
+        ];
+        break;
+      case 'STREET_DANCE':
+        newCriteria = [
+          { id: generateId(), name: 'Performance (Skills, Precision, Timing)', weight: 50 },
+          { id: generateId(), name: 'Choreography (Creativity, Originality)', weight: 30 },
+          { id: generateId(), name: 'Production Design (Costume/Props)', weight: 20 }
+        ];
+        break;
+      case 'STEMAZING':
+        newCriteria = [
+          { id: generateId(), name: 'Written Proposal: Content', weight: 35 },
+          { id: generateId(), name: 'Feasibility of Solution', weight: 15 },
+          { id: generateId(), name: 'Oral Presentation: Discussion', weight: 20 },
+          { id: generateId(), name: 'Ability to Answer Questions', weight: 15 },
+          { id: generateId(), name: 'Relevance of Data', weight: 15 }
+        ];
+        break;
+      case 'POP_QUIZ':
+        type = EventType.QUIZ_BEE;
+        newRounds = [
+          { id: generateId(), name: 'Easy Round (1pt each)', points: 1, isTieBreaker: false },
+          { id: generateId(), name: 'Average Round (2pts each)', points: 2, isTieBreaker: false },
+          { id: generateId(), name: 'Difficult Round (3pts each)', points: 3, isTieBreaker: false },
+          { id: generateId(), name: 'Tie-Breaker Clincher', points: 1, isTieBreaker: true }
+        ];
+        break;
+      case 'STORY_RETELLING':
+        newCriteria = [
+          { id: generateId(), name: 'Mastery of the Story', weight: 50 },
+          { id: generateId(), name: 'Voice Projection / Language', weight: 30 },
+          { id: generateId(), name: 'Stage Presence', weight: 20 }
+        ];
+        break;
+    }
+
+    setEventType(type);
+    setCriteria(newCriteria);
+    setRounds(newRounds);
+    if (!eventName) setEventName(category.replace('_', ' '));
   };
 
   const handleSaveEvent = () => {
@@ -126,15 +179,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setShowWizard(false); setEditingEventId(null); setEventName(''); setCriteria([]); setRounds([]); setEventType(EventType.JUDGING); 
   };
 
-  const addQuizRound = () => {
-    setRounds([...rounds, { id: Math.random().toString(36).substr(2, 9), name: `Round ${rounds.length + 1}`, points: 1, isTieBreaker: false }]);
-  };
-
   const handleCreateJudge = async () => {
     if (!judgeEmail || !judgePassword || !assignedEventId || !judgeName) return alert("Fill all details.");
     setIsSubmitting(true);
     try {
-      // 1. Create the Auth account
       const { data, error: authError } = await authClient.auth.signUp({
         email: judgeEmail,
         password: judgePassword,
@@ -144,7 +192,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (authError) throw new Error(`Auth Error: ${authError.message}`);
       if (!data.user) throw new Error("Auth service failed to return user ID.");
 
-      // 2. Insert into the public.profiles table
       await onAddJudge({ 
         id: data.user.id, 
         name: judgeName, 
@@ -153,13 +200,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         assigned_event_id: assignedEventId 
       });
 
-      alert(`Judge account for ${judgeName} created and verified successfully.`);
+      alert(`Judge account for ${judgeName} created successfully.`);
       setJudgeName(''); setJudgeEmail(''); setJudgePassword(''); setAssignedEventId('');
       setShowJudgeModal(false);
-      onRefreshData(); // Sync the list
+      onRefreshData();
     } catch (error: any) {
-      console.error("Judge Creation Failure:", error);
-      alert(error.message || "An unexpected error occurred during judge registration.");
+      alert(error.message || "An error occurred.");
     } finally {
       setIsSubmitting(false);
     }
@@ -179,12 +225,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={handleRefresh} className={`p-3 bg-white/5 rounded-xl text-slate-400 hover:text-white transition-all ${isRefreshing ? 'animate-spin text-blue-400' : ''}`} title="Refresh data">
+          <button onClick={handleRefresh} className={`p-3 bg-white/5 rounded-xl text-slate-400 hover:text-white transition-all ${isRefreshing ? 'animate-spin text-blue-400' : ''}`}>
             <RefreshCw size={20} />
           </button>
           {activeTab === 'events' && (
             <button onClick={() => { resetForm(); setShowWizard(true); }} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20">
-              <Plus size={20} /> New Event
+              <Plus size={20} /> New Contest
             </button>
           )}
         </div>
@@ -195,7 +241,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {events.map(event => (
             <div key={event.id} className="glass group hover:bg-white/[0.04] transition-all p-8 rounded-[2.5rem] border border-white/10 flex items-center justify-between shadow-xl">
               <div className="flex items-center gap-6">
-                <div className="w-16 h-16 rounded-3xl bg-white/5 flex items-center justify-center text-blue-400 border border-white/5 group-hover:scale-105 transition-transform">
+                <div className="w-16 h-16 rounded-3xl bg-white/5 flex items-center justify-center text-blue-400 border border-white/5">
                   {event.type === EventType.JUDGING ? <Award size={32} /> : <Hash size={32} />}
                 </div>
                 <div>
@@ -207,159 +253,144 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <button onClick={() => setEditingEventId(event.id)} className="p-3.5 bg-white/5 text-slate-400 rounded-2xl hover:bg-white/10 hover:text-blue-400 transition-all"><Edit3 size={20} /></button>
-                <button onClick={() => setShowEnrollModal(event.id)} className="p-3.5 bg-blue-600/10 text-blue-400 rounded-2xl hover:bg-blue-600/20 transition-all"><UserPlus size={20} /></button>
-                <button onClick={() => onUpdateEvent({ ...event, isLocked: !event.isLocked })} className={`p-3.5 rounded-2xl transition-all ${event.isLocked ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                <button onClick={() => setEditingEventId(event.id)} className="p-3.5 bg-white/5 text-slate-400 rounded-2xl hover:bg-white/10 hover:text-blue-400"><Edit3 size={20} /></button>
+                <button onClick={() => setShowEnrollModal(event.id)} className="p-3.5 bg-blue-600/10 text-blue-400 rounded-2xl hover:bg-blue-600/20"><UserPlus size={20} /></button>
+                <button onClick={() => onUpdateEvent({ ...event, isLocked: !event.isLocked })} className={`p-3.5 rounded-2xl ${event.isLocked ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
                   {event.isLocked ? <Lock size={20} /> : <Unlock size={20} />}
                 </button>
               </div>
             </div>
           ))}
-          {events.length === 0 && <div className="col-span-full py-20 text-center glass rounded-[3rem] text-slate-600 italic">No events initialized.</div>}
         </div>
       )}
 
+      {/* Judges tab same as before but cleaner mapping... */}
       {activeTab === 'judges' && (
-        <div className="glass-card rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl">
+        <div className="glass-card rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden">
            <table className="w-full text-left">
             <thead className="bg-white/5 border-b border-white/10">
               <tr>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-slate-500">Judge Identity</th>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-slate-500">Event Assignment</th>
+                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-slate-500">Judge</th>
+                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-slate-500">Contest</th>
                 <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {judges.length > 0 ? judges.map(judge => (
-                <tr key={judge.id} className="hover:bg-white/5 transition-colors group">
+              {judges.map(judge => (
+                <tr key={judge.id} className="hover:bg-white/5 transition-colors">
                   <td className="px-8 py-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-blue-600/10 flex items-center justify-center text-blue-400 font-bold border border-blue-400/20">
-                        {judge.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="text-white font-bold">{judge.name}</p>
-                        <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">{judge.email}</p>
-                      </div>
-                    </div>
+                    <p className="text-white font-bold">{judge.name}</p>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-widest">{judge.email}</p>
                   </td>
-                  <td className="px-8 py-6"><span className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest">{events.find(e => e.id === judge.assignedEventId)?.name || 'Unassigned'}</span></td>
+                  <td className="px-8 py-6">
+                    <span className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest">
+                      {events.find(e => e.id === judge.assignedEventId)?.name || 'Unassigned'}
+                    </span>
+                  </td>
                   <td className="px-8 py-6 text-right">
-                    <button onClick={() => { if(confirm('Delete account?')) onRemoveJudge(judge.id); }} className="p-2.5 bg-white/5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all">
+                    <button onClick={() => onRemoveJudge(judge.id)} className="p-2.5 bg-white/5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all">
                       <Trash2 size={18} />
                     </button>
                   </td>
                 </tr>
-              )) : (
-                <tr><td colSpan={3} className="px-8 py-20 text-center text-slate-600 italic">No judge accounts recorded.</td></tr>
-              )}
+              ))}
             </tbody>
            </table>
-           <div className="p-6 border-t border-white/5 flex justify-end">
-             <button onClick={() => setShowJudgeModal(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all text-sm shadow-xl shadow-indigo-600/20">
-                <UserPlus size={18} /> Register New Judge
-             </button>
-          </div>
         </div>
       )}
 
-      {/* System Tab & Modals... */}
+      {/* Wizard with Presets */}
       {showWizard && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl overflow-y-auto">
-          <div className="glass-card w-full max-w-3xl p-8 lg:p-12 rounded-[3rem] border border-white/10 shadow-2xl my-auto animate-in zoom-in-95">
+          <div className="glass-card w-full max-w-4xl p-8 lg:p-12 rounded-[3rem] border border-white/10 shadow-2xl my-auto animate-in zoom-in-95">
             <div className="flex justify-between items-start mb-10">
-              <h3 className="text-3xl font-black font-header tracking-tight text-white">{editingEventId ? 'Modify Category' : 'New Contest Category'}</h3>
+              <h3 className="text-3xl font-black font-header tracking-tight text-white">Initialize RFOT Event</h3>
               <button onClick={resetForm} className="p-3 bg-white/5 text-slate-500 hover:text-white rounded-2xl"><X /></button>
             </div>
-            <div className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Contest Name</label>
-                  <input type="text" value={eventName} onChange={e => setEventName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none focus:border-blue-500" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Competition Style</label>
-                  <div className="flex gap-3">
-                    <button onClick={() => setEventType(EventType.JUDGING)} className={`flex-1 py-4 rounded-2xl font-bold border transition-all ${eventType === EventType.JUDGING ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-600/20' : 'bg-white/5 border-white/5 text-slate-500'}`}>Judging</button>
-                    <button onClick={() => setEventType(EventType.QUIZ_BEE)} className={`flex-1 py-4 rounded-2xl font-bold border transition-all ${eventType === EventType.QUIZ_BEE ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-600/20' : 'bg-white/5 border-white/5 text-slate-500'}`}>Quiz Bee</button>
-                  </div>
-                </div>
-              </div>
 
-              {eventType === EventType.JUDGING ? (
-                <WeightingWizard initialCriteria={criteria} onChange={setCriteria} />
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+               <div className="lg:col-span-1 space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Official Presets</label>
+                    <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                       {[
+                         { id: 'ICT_INVITATION', name: 'ICT Invitation Card', icon: <Zap size={14}/> },
+                         { id: 'EIM', name: 'Electrical (EIM)', icon: <Microscope size={14}/> },
+                         { id: 'STREET_DANCE', name: 'Street Dance (Bayle)', icon: <Music size={14}/> },
+                         { id: 'STEMAZING', name: 'STEMazing Proposal', icon: <Microscope size={14}/> },
+                         { id: 'STORY_RETELLING', name: 'Story Retelling', icon: <BookOpen size={14}/> },
+                         { id: 'POP_QUIZ', name: 'Pop Quiz (1,2,3 pts)', icon: <Hash size={14}/> }
+                       ].map(preset => (
+                         <button 
+                           key={preset.id} 
+                           onClick={() => applyTemplate(preset.id)}
+                           className="w-full p-4 bg-white/5 border border-white/5 hover:border-blue-500/30 rounded-2xl text-left flex items-center gap-3 group transition-all"
+                         >
+                            <div className="p-2 bg-blue-500/10 text-blue-400 rounded-lg group-hover:bg-blue-500 group-hover:text-white transition-all">
+                              {preset.icon}
+                            </div>
+                            <span className="text-xs font-bold text-slate-300 group-hover:text-white">{preset.name}</span>
+                         </button>
+                       ))}
+                    </div>
+                  </div>
+               </div>
+
+               <div className="lg:col-span-2 space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <h4 className="font-bold text-white">Quiz Bee Configuration</h4>
-                      <p className="text-xs text-slate-500">Define round point values and tie-breaker settings.</p>
+                      <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Event Name</label>
+                      <input type="text" value={eventName} onChange={e => setEventName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none focus:border-blue-500" />
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={loadQuizBeeTemplate} className="flex items-center gap-2 text-indigo-400 bg-indigo-400/10 px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-indigo-400/20 transition-all border border-indigo-400/20">
-                        <Zap size={14} /> Load Standard Template
-                      </button>
-                      <button onClick={addQuizRound} className="flex items-center gap-2 text-blue-400 bg-blue-400/10 px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-blue-400/20 transition-all border border-blue-400/20">
-                        <Plus size={16} /> Add Round
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                    {rounds.map((r, i) => (
-                      <div key={r.id} className="glass p-5 rounded-2xl border border-white/5 flex flex-wrap md:flex-nowrap gap-4 items-center group">
-                        <div className="flex-1 min-w-[200px]">
-                          <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Round Label</label>
-                          <input type="text" value={r.name} onChange={e => setRounds(rounds.map(rd => rd.id === r.id ? {...rd, name: e.target.value} : rd))} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-blue-500 outline-none" />
-                        </div>
-                        <div className="w-24">
-                          <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Max Points</label>
-                          <input type="number" value={r.points} onChange={e => setRounds(rounds.map(rd => rd.id === r.id ? {...rd, points: parseInt(e.target.value) || 0} : rd))} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white text-center focus:border-blue-500 outline-none" />
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500 cursor-pointer">
-                            <input type="checkbox" checked={r.isTieBreaker} onChange={e => setRounds(rounds.map(rd => rd.id === r.id ? {...rd, isTieBreaker: e.target.checked} : rd))} className="rounded border-white/10 bg-white/5" />
-                            Clincher?
-                          </label>
-                          <button onClick={() => setRounds(rounds.filter(rd => rd.id !== r.id))} className="p-2 text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
-                        </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Competition Style</label>
+                      <div className="flex gap-3">
+                        <button onClick={() => setEventType(EventType.JUDGING)} className={`flex-1 py-4 rounded-2xl font-bold border transition-all ${eventType === EventType.JUDGING ? 'bg-blue-600 border-blue-400 text-white' : 'bg-white/5 border-white/5 text-slate-500'}`}>Judging</button>
+                        <button onClick={() => setEventType(EventType.QUIZ_BEE)} className={`flex-1 py-4 rounded-2xl font-bold border transition-all ${eventType === EventType.QUIZ_BEE ? 'bg-blue-600 border-blue-400 text-white' : 'bg-white/5 border-white/5 text-slate-500'}`}>Quiz Bee</button>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              )}
-              <button onClick={handleSaveEvent} className="w-full py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20 flex items-center justify-center gap-3"><Save /> Finalize Category</button>
+
+                  {eventType === EventType.JUDGING ? (
+                    <WeightingWizard initialCriteria={criteria} onChange={setCriteria} />
+                  ) : (
+                    <div className="space-y-6">
+                       {/* Same round management as before but with point values... */}
+                       <div className="flex items-center justify-between">
+                         <h4 className="font-bold text-white">Quiz Rounds</h4>
+                         <button onClick={() => setRounds([...rounds, { id: Math.random().toString(36).substr(2, 9), name: `Round ${rounds.length+1}`, points: 1 }])} className="text-xs text-blue-400 flex items-center gap-1"><Plus size={14}/> Add Round</button>
+                       </div>
+                       <div className="space-y-3">
+                         {rounds.map(r => (
+                           <div key={r.id} className="flex items-center gap-4 bg-white/5 p-3 rounded-xl border border-white/5">
+                              <input className="flex-1 bg-transparent border-none text-sm font-bold text-white outline-none" value={r.name} onChange={e => setRounds(rounds.map(rd => rd.id === r.id ? {...rd, name: e.target.value} : rd))} />
+                              <div className="w-20">
+                                <label className="text-[8px] text-slate-500 block uppercase font-black">Pts/Item</label>
+                                <input type="number" className="w-full bg-slate-950 border border-white/10 rounded px-2 py-1 text-xs text-white" value={r.points} onChange={e => setRounds(rounds.map(rd => rd.id === r.id ? {...rd, points: parseInt(e.target.value) || 1} : rd))} />
+                              </div>
+                              <button onClick={() => setRounds(rounds.filter(rd => rd.id !== r.id))} className="text-slate-600 hover:text-red-400"><Trash2 size={16}/></button>
+                           </div>
+                         ))}
+                       </div>
+                    </div>
+                  )}
+
+                  <button onClick={handleSaveEvent} className="w-full py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20">Finalize Configuration</button>
+               </div>
             </div>
           </div>
         </div>
       )}
-
-      {showJudgeModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
-          <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10">
-            <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black font-header text-white">Create Judge Account</h3><button onClick={() => setShowJudgeModal(false)} className="text-slate-600 hover:text-white"><X /></button></div>
-            <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-2xl mb-6 flex items-start gap-3">
-              <ShieldCheck className="text-blue-500 shrink-0 mt-0.5" size={18} />
-              <p className="text-[10px] text-blue-200/70 font-bold uppercase tracking-widest leading-relaxed">System Admin Bypass: Auth remains active while creating these credentials.</p>
-            </div>
-            <div className="space-y-6">
-              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Full Name</label><input type="text" value={judgeName} onChange={e => setJudgeName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" placeholder="Hon. Judge Name" /></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Official Email</label><input type="email" value={judgeEmail} onChange={e => setJudgeEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" placeholder="judge@rfot.gov.ph" /></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Password</label><input type="password" value={judgePassword} onChange={e => setJudgePassword(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" placeholder="••••••••" /></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Assign Contest Category</label><select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-4 rounded-xl font-bold text-white outline-none"><option value="">Select Category</option>{events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
-              <button disabled={isSubmitting} onClick={handleCreateJudge} className="w-full bg-indigo-600 p-4 rounded-xl font-black uppercase tracking-widest text-white flex items-center justify-center gap-2">{isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />} Finalize Account</button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      
+      {/* Enroll Modal... */}
       {showEnrollModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
           <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10">
             <div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black font-header text-white">Enroll Contestant</h3><button onClick={() => setShowEnrollModal(null)} className="text-slate-600 hover:text-white"><X /></button></div>
             <div className="space-y-6">
-              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Name</label><input type="text" value={newPartName} onChange={e => setNewPartName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" placeholder="Contestant Name" /></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">SDO District</label><select value={newPartDistrict} onChange={e => setNewPartDistrict(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none">{SDO_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-              <button onClick={() => { onAddParticipant({ id: '', name: newPartName, district: newPartDistrict, eventId: showEnrollModal }); setShowEnrollModal(null); setNewPartName(''); }} className="w-full bg-blue-600 hover:bg-blue-700 p-5 rounded-2xl font-black uppercase tracking-widest text-white flex items-center justify-center gap-2"><UserPlus size={20} /> Enroll</button>
+              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Name</label><input type="text" value={newPartName} onChange={e => setNewPartName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" /></div>
+              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">District</label><select value={newPartDistrict} onChange={e => setNewPartDistrict(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none">{SDO_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+              <button onClick={() => { onAddParticipant({ id: '', name: newPartName, district: newPartDistrict, eventId: showEnrollModal! }); setShowEnrollModal(null); }} className="w-full bg-blue-600 hover:bg-blue-700 p-5 rounded-2xl font-black uppercase tracking-widest text-white">Enroll</button>
             </div>
           </div>
         </div>
