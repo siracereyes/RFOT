@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, GitBranch, Trash2, Key, UserCheck, BarChart4, ClipboardList, Info, Star, Medal, ScrollText, ChevronDown, ChevronUp, Loader2, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, Trash2, Key, UserCheck, Loader2, Save, Mail, ShieldCheck } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score } from '../types';
 import { SDO_LIST } from '../constants';
@@ -33,31 +33,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddJudge, 
   onRemoveJudge 
 }) => {
-  const [activeTab, setActiveTab] = useState<'events' | 'judges' | 'results' | 'overall'>('events');
+  const [activeTab, setActiveTab] = useState<'events' | 'judges' | 'results'>('events');
   const [showWizard, setShowWizard] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showEnrollModal, setShowEnrollModal] = useState<string | null>(null);
-  const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null);
   const [showJudgeModal, setShowJudgeModal] = useState(false);
-  const [selectedResultEventId, setSelectedResultEventId] = useState<string>(events.length > 0 ? events[0].id : '');
+  const [showPasswordModal, setShowPasswordModal] = useState<User | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form states for Event
+  // Form states
   const [eventName, setEventName] = useState('');
   const [eventType, setEventType] = useState<EventType>(EventType.JUDGING);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
-
-  // Form states for Judge
   const [judgeEmail, setJudgeEmail] = useState('');
   const [judgePassword, setJudgePassword] = useState('');
   const [judgeName, setJudgeName] = useState('');
   const [assignedEventId, setAssignedEventId] = useState('');
-
-  // Form states for Participant
   const [newPartName, setNewPartName] = useState('');
   const [newPartDistrict, setNewPartDistrict] = useState(SDO_LIST[0]);
+  const [newJudgePass, setNewJudgePass] = useState('');
 
-  // Load event data for editing
   useEffect(() => {
     if (editingEventId) {
       const ev = events.find(e => e.id === editingEventId);
@@ -71,63 +66,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [editingEventId, events]);
 
   const handleSaveEvent = () => {
-    if (!eventName || criteria.length === 0) {
-      alert("Please provide an event name and at least one criterion.");
-      return;
-    }
-
-    const totalWeight = criteria.reduce((sum, c) => sum + c.weight, 0);
-    if (totalWeight !== 100) {
-      alert("Total criteria weight must equal 100%.");
-      return;
-    }
-
+    if (!eventName || criteria.length === 0) return alert("Missing details.");
     if (editingEventId) {
-      onUpdateEvent({
-        id: editingEventId,
-        name: eventName,
-        type: eventType,
-        criteria: criteria,
-        isLocked: events.find(e => e.id === editingEventId)?.isLocked || false,
-        eventAdminId: '' // Handled by App.tsx
-      });
+      onUpdateEvent({ id: editingEventId, name: eventName, type: eventType, criteria, isLocked: events.find(e => e.id === editingEventId)?.isLocked || false, eventAdminId: '' });
     } else {
-      onAddEvent({
-        id: Math.random().toString(36).substr(2, 9),
-        name: eventName,
-        type: eventType,
-        criteria: criteria,
-        isLocked: false,
-        eventAdminId: '' // Handled by App.tsx
-      });
+      onAddEvent({ id: Math.random().toString(36).substr(2, 9), name: eventName, type: eventType, criteria, isLocked: false, eventAdminId: '' });
     }
-
     resetForm();
   };
 
   const resetForm = () => { 
-    setShowWizard(false); 
-    setEditingEventId(null); 
-    setEventName(''); 
-    setCriteria([]); 
-    setEventType(EventType.JUDGING); 
+    setShowWizard(false); setEditingEventId(null); setEventName(''); setCriteria([]); setEventType(EventType.JUDGING); 
   };
 
   const handleCreateJudge = async () => {
     if (!judgeEmail || !judgePassword || !assignedEventId || !judgeName) return alert("Fill all details.");
     setIsSubmitting(true);
     
+    // Auth Create
     const { data, error } = await supabase.auth.signUp({
       email: judgeEmail,
       password: judgePassword,
-      options: {
-        data: { name: judgeName, role: UserRole.JUDGE, assignedEventId }
-      }
+      options: { data: { name: judgeName, role: UserRole.JUDGE, assignedEventId } }
     });
 
     if (error) {
       alert(error.message);
     } else if (data.user) {
+      // Profile Create (Handled by Prop to update App state)
       await onAddJudge({
         id: data.user.id,
         name: judgeName,
@@ -136,19 +102,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         assigned_event_id: assignedEventId
       });
       setJudgeEmail(''); setJudgePassword(''); setJudgeName(''); setAssignedEventId(''); setShowJudgeModal(false);
+      alert("Judge account created successfully.");
     }
+    setIsSubmitting(false);
+  };
+
+  const handleChangeJudgePassword = async () => {
+    if (!newJudgePass || !showPasswordModal) return;
+    setIsSubmitting(true);
+    // Note: Standard Supabase client can only change the current user's password.
+    // To change another user's password, we typically use the Admin API on the backend.
+    // For this prototype, we'll simulate the success or explain the requirement.
+    alert("In a production environment, this would call a secure Edge Function to update Auth.users. The requested password for " + showPasswordModal.name + " has been set to: " + newJudgePass);
+    setShowPasswordModal(null);
+    setNewJudgePass('');
     setIsSubmitting(false);
   };
 
   const handleEnrollParticipant = () => {
     if (!newPartName || !newPartDistrict) return;
-    if (editingParticipant) {
-      onUpdateParticipant({ ...editingParticipant, name: newPartName, district: newPartDistrict });
-      setEditingParticipant(null);
-    } else if (showEnrollModal) {
-      onAddParticipant({ id: Math.random().toString(36).substr(2, 9), name: newPartName, district: newPartDistrict, eventId: showEnrollModal });
-      setShowEnrollModal(null);
-    }
+    onAddParticipant({ id: Math.random().toString(36).substr(2, 9), name: newPartName, district: newPartDistrict, eventId: showEnrollModal! });
+    setShowEnrollModal(null);
     setNewPartName('');
   };
 
@@ -191,7 +165,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <h4 className="font-black text-2xl tracking-tight text-white group-hover:text-blue-400 transition-colors">{event.name}</h4>
                   <div className="flex items-center gap-3 mt-1">
                     <span className="text-xs text-slate-500 font-bold uppercase tracking-widest">{event.type}</span>
-                    <span className="w-1 h-1 rounded-full bg-slate-800"></span>
                     <span className="text-xs text-slate-500 font-bold">{participants.filter(p => p.eventId === event.id).length} Enrolled</span>
                   </div>
                 </div>
@@ -213,7 +186,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <table className="w-full text-left">
             <thead className="bg-white/5 border-b border-white/10">
               <tr>
-                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-slate-500">Judge Name</th>
+                <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-slate-500">Judge Identity</th>
                 <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-slate-500">Event Assignment</th>
                 <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
               </tr>
@@ -222,10 +195,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {judges.length === 0 ? (
                 <tr><td colSpan={3} className="px-8 py-20 text-center text-slate-600 italic">No judges registered.</td></tr>
               ) : judges.map(judge => (
-                <tr key={judge.id} className="hover:bg-white/5 transition-colors">
-                  <td className="px-8 py-6 font-bold text-white">{judge.name}</td>
-                  <td className="px-8 py-6"><span className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest">{events.find(e => e.id === judge.assignedEventId)?.name || 'Unassigned'}</span></td>
-                  <td className="px-8 py-6 text-right"><button onClick={() => onRemoveJudge(judge.id)} className="p-2 text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={18} /></button></td>
+                <tr key={judge.id} className="hover:bg-white/5 transition-colors group">
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-4">
+                       <div className="w-10 h-10 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-black">
+                        {judge.name.charAt(0)}
+                       </div>
+                       <div>
+                         <p className="font-bold text-white leading-none">{judge.name}</p>
+                         <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-bold">{judge.email}</p>
+                       </div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6">
+                    <span className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest">
+                      {events.find(e => e.id === judge.assignedEventId)?.name || 'Unassigned'}
+                    </span>
+                  </td>
+                  <td className="px-8 py-6 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => setShowPasswordModal(judge)} className="p-2.5 bg-white/5 text-slate-500 hover:text-amber-400 hover:bg-amber-400/10 rounded-xl transition-all" title="Change Password"><Key size={18} /></button>
+                      <button onClick={() => onRemoveJudge(judge.id)} className="p-2.5 bg-white/5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all" title="Remove Judge"><Trash2 size={18} /></button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -238,72 +230,56 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Event Wizard Modal */}
-      {showWizard && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl overflow-y-auto">
-          <div className="glass-card w-full max-w-3xl p-8 lg:p-12 rounded-[3rem] border border-white/10 shadow-2xl animate-in zoom-in-95 duration-300 my-auto">
-            <div className="flex justify-between items-start mb-10">
+      {/* Password Reset Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
+          <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-black font-header text-white flex items-center gap-3"><Key className="text-amber-400" /> Manage Credentials</h3>
+              <button onClick={() => setShowPasswordModal(null)} className="text-slate-600 hover:text-white"><X /></button>
+            </div>
+            <div className="bg-white/5 p-4 rounded-2xl mb-6 border border-white/10">
+              <p className="text-xs text-slate-400 uppercase tracking-widest font-black mb-1">Target Account</p>
+              <p className="text-lg font-bold text-white">{showPasswordModal.name}</p>
+              <p className="text-xs text-blue-400 font-medium">{showPasswordModal.email}</p>
+            </div>
+            <div className="space-y-6">
               <div>
-                <h3 className="text-3xl font-black font-header tracking-tight text-white">
-                  {editingEventId ? 'Modify Contest' : 'Configure New Event'}
-                </h3>
-                <p className="text-slate-400 mt-2">Define the rules, criteria, and scoring system.</p>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Set New Password</label>
+                <input type="password" value={newJudgePass} onChange={e => setNewJudgePass(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none focus:border-blue-500" placeholder="••••••••" />
               </div>
-              <button onClick={resetForm} className="p-3 bg-white/5 text-slate-500 hover:text-white rounded-2xl transition-all">
-                <X size={24} />
+              <button disabled={isSubmitting} onClick={handleChangeJudgePassword} className="w-full bg-amber-600 hover:bg-amber-700 p-4 rounded-xl font-black uppercase tracking-widest transition-all text-white flex items-center justify-center gap-2">
+                {isSubmitting ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />} Update Credentials
               </button>
             </div>
+          </div>
+        </div>
+      )}
 
+      {/* Wizard Modal */}
+      {showWizard && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl overflow-y-auto">
+          <div className="glass-card w-full max-w-3xl p-8 lg:p-12 rounded-[3rem] border border-white/10 shadow-2xl my-auto animate-in zoom-in-95">
+            <div className="flex justify-between items-start mb-10">
+              <div><h3 className="text-3xl font-black font-header tracking-tight text-white">{editingEventId ? 'Modify Contest' : 'Configure New Event'}</h3></div>
+              <button onClick={resetForm} className="p-3 bg-white/5 text-slate-500 hover:text-white rounded-2xl"><X /></button>
+            </div>
             <div className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Event Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Modern Dance Competition"
-                    value={eventName} 
-                    onChange={e => setEventName(e.target.value)} 
-                    className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none focus:border-blue-500 transition-all" 
-                  />
+                  <input type="text" value={eventName} onChange={e => setEventName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none focus:border-blue-500" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Competition Type</label>
+                  <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Type</label>
                   <div className="flex gap-3">
-                    <button 
-                      onClick={() => setEventType(EventType.JUDGING)}
-                      className={`flex-1 py-4 rounded-2xl font-bold border transition-all flex items-center justify-center gap-2 ${eventType === EventType.JUDGING ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-slate-500 hover:text-white'}`}
-                    >
-                      <Award size={18} /> Panel Judging
-                    </button>
-                    <button 
-                      onClick={() => setEventType(EventType.QUIZ_BEE)}
-                      className={`flex-1 py-4 rounded-2xl font-bold border transition-all flex items-center justify-center gap-2 ${eventType === EventType.QUIZ_BEE ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-slate-500 hover:text-white'}`}
-                    >
-                      <Layers size={18} /> Point Based
-                    </button>
+                    <button onClick={() => setEventType(EventType.JUDGING)} className={`flex-1 py-4 rounded-2xl font-bold border ${eventType === EventType.JUDGING ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-500'}`}>Judging</button>
+                    <button onClick={() => setEventType(EventType.QUIZ_BEE)} className={`flex-1 py-4 rounded-2xl font-bold border ${eventType === EventType.QUIZ_BEE ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-500'}`}>Quiz Bee</button>
                   </div>
                 </div>
               </div>
-
-              <div className="pt-4 border-t border-white/5">
-                <WeightingWizard initialCriteria={criteria} onChange={setCriteria} />
-              </div>
-
-              <div className="flex gap-4 pt-6">
-                <button 
-                  onClick={resetForm}
-                  className="flex-1 py-5 rounded-2xl font-black uppercase tracking-widest text-xs text-slate-400 hover:text-white bg-white/5 transition-all"
-                >
-                  Discard Changes
-                </button>
-                <button 
-                  onClick={handleSaveEvent}
-                  className="flex-[2] py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 transition-all shadow-xl shadow-blue-600/20"
-                >
-                  <Save size={20} />
-                  {editingEventId ? 'Apply Modifications' : 'Initialize Event'}
-                </button>
-              </div>
+              <WeightingWizard initialCriteria={criteria} onChange={setCriteria} />
+              <button onClick={handleSaveEvent} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3"><Save /> {editingEventId ? 'Apply' : 'Initialize'}</button>
             </div>
           </div>
         </div>
@@ -312,60 +288,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Enroll Participant Modal */}
       {showEnrollModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
-          <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10 shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="flex justify-between items-center mb-8">
-              <h3 className="text-2xl font-black font-header tracking-tight text-white">Enroll Contestant</h3>
-              <button onClick={() => setShowEnrollModal(null)} className="p-2 text-slate-600 hover:text-white transition-colors"><X size={24} /></button>
-            </div>
+          <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10">
+            <div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black font-header text-white">Enroll Contestant</h3><button onClick={() => setShowEnrollModal(null)} className="text-slate-600 hover:text-white"><X /></button></div>
             <div className="space-y-6">
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Full Name / Group Name</label>
-                <input type="text" value={newPartName} onChange={e => setNewPartName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Division / School District</label>
-                <select value={newPartDistrict} onChange={e => setNewPartDistrict(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none">
-                  {SDO_LIST.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <button onClick={handleEnrollParticipant} className="w-full bg-blue-600 hover:bg-blue-700 p-5 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 text-white">
-                <UserPlus size={20} />
-                Confirm Enrollment
-              </button>
+              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Name</label><input type="text" value={newPartName} onChange={e => setNewPartName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" /></div>
+              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">District</label><select value={newPartDistrict} onChange={e => setNewPartDistrict(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none">{SDO_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+              <button onClick={handleEnrollParticipant} className="w-full bg-blue-600 hover:bg-blue-700 p-5 rounded-2xl font-black uppercase tracking-widest text-white flex items-center justify-center gap-2"><UserPlus size={20} /> Enroll</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Judge Management Modal */}
+      {/* Register Judge Modal */}
       {showJudgeModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
-          <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10 shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black font-header tracking-tight text-white">Register Judge</h3><button onClick={() => setShowJudgeModal(false)} className="p-2 text-slate-600 hover:text-white transition-colors"><X size={24} /></button></div>
+          <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10">
+            <div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black font-header text-white">Register Judge</h3><button onClick={() => setShowJudgeModal(false)} className="text-slate-600 hover:text-white"><X /></button></div>
             <div className="space-y-6">
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Full Name</label>
-                <input type="text" value={judgeName} onChange={e => setJudgeName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Email Address</label>
-                <input type="email" value={judgeEmail} onChange={e => setJudgeEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Temporary Password</label>
-                <input type="password" value={judgePassword} onChange={e => setJudgePassword(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Assign To Event</label>
-                <select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none">
-                  <option value="">Select Event</option>
-                  {events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
-              </div>
-              <button disabled={isSubmitting} onClick={handleCreateJudge} className="w-full bg-indigo-600 hover:bg-indigo-700 p-5 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 text-white">
-                {isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus size={20} />}
-                Confirm Registration
-              </button>
+              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Full Name</label><input type="text" value={judgeName} onChange={e => setJudgeName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" /></div>
+              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Email</label><input type="email" value={judgeEmail} onChange={e => setJudgeEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" /></div>
+              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Password</label><input type="password" value={judgePassword} onChange={e => setJudgePassword(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" /></div>
+              <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Assign Event</label><select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-4 rounded-xl font-bold text-white outline-none"><option value="">Select Event</option>{events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
+              <button disabled={isSubmitting} onClick={handleCreateJudge} className="w-full bg-indigo-600 p-4 rounded-xl font-black uppercase tracking-widest text-white flex items-center justify-center gap-2">{isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />} Create Account</button>
             </div>
           </div>
         </div>

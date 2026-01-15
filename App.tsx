@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { UserRole, Event, Participant, Score, User } from './types';
 import Layout from './components/Layout';
@@ -54,7 +54,29 @@ const App: React.FC = () => {
     assignedEventId: db.assigned_event_id
   });
 
-  // Separate function to handle profile resolution
+  const fetchAllData = useCallback(async () => {
+    try {
+      const results = await Promise.allSettled([
+        supabase.from('events').select('*'),
+        supabase.from('participants').select('*'),
+        supabase.from('scores').select('*'),
+        supabase.from('profiles').select('*')
+      ]);
+
+      results.forEach((res, idx) => {
+        if (res.status === 'fulfilled' && res.value.data) {
+          const data = res.value.data;
+          if (idx === 0) setEvents(data.map(mapEvent));
+          if (idx === 1) setParticipants(data.map(mapParticipant));
+          if (idx === 2) setScores(data.map(mapScore));
+          if (idx === 3) setUsers(data.map(mapUser));
+        }
+      });
+    } catch (e) {
+      console.error("Data fetch error:", e);
+    }
+  }, []);
+
   const resolveProfile = async (authSession: any) => {
     if (!authSession?.user) {
       setCurrentUser(null);
@@ -62,7 +84,7 @@ const App: React.FC = () => {
     }
 
     try {
-      const { data: profile, error } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authSession.user.id)
@@ -78,8 +100,6 @@ const App: React.FC = () => {
           email: authSession.user.email || ''
         };
         setCurrentUser(fallbackUser);
-        
-        // Auto-create profile if missing
         await supabase.from('profiles').upsert([{
           id: authSession.user.id,
           name: fallbackUser.name,
@@ -95,40 +115,9 @@ const App: React.FC = () => {
   useEffect(() => {
     const initApp = async () => {
       try {
-        // 1. Check current session immediately
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          await resolveProfile(session);
-        }
-
-        // 2. Load initial data in parallel without blocking the UI if one fails
-        const fetchData = async () => {
-          try {
-            const results = await Promise.allSettled([
-              supabase.from('events').select('*'),
-              supabase.from('participants').select('*'),
-              supabase.from('scores').select('*'),
-              supabase.from('profiles').select('*')
-            ]);
-
-            results.forEach((res, idx) => {
-              if (res.status === 'fulfilled' && res.value.data) {
-                const data = res.value.data;
-                if (idx === 0) setEvents(data.map(mapEvent));
-                if (idx === 1) setParticipants(data.map(mapParticipant));
-                if (idx === 2) setScores(data.map(mapScore));
-                if (idx === 3) setUsers(data.map(mapUser));
-              } else if (res.status === 'rejected') {
-                console.warn(`Data fetch index ${idx} failed:`, res.reason);
-              }
-            });
-          } catch (e) {
-            console.error("Background data fetch error:", e);
-          }
-        };
-
-        fetchData();
-
+        if (session) await resolveProfile(session);
+        await fetchAllData();
       } catch (e) {
         console.error("Initialization error:", e);
       } finally {
@@ -138,34 +127,15 @@ const App: React.FC = () => {
 
     initApp();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN') {
-        await resolveProfile(session);
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-      }
+      if (event === 'SIGNED_IN') await resolveProfile(session);
+      else if (event === 'SIGNED_OUT') setCurrentUser(null);
     });
-
-    // Real-time scores
-    const scoresSubscription = supabase
-      .channel('realtime_scores')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setScores(prev => [...prev, mapScore(payload.new)]);
-        } else if (payload.eventType === 'UPDATE') {
-          setScores(prev => prev.map(s => s.id === payload.new.id ? mapScore(payload.new) : s));
-        } else if (payload.eventType === 'DELETE') {
-          setScores(prev => prev.filter(s => s.id !== payload.old.id));
-        }
-      })
-      .subscribe();
 
     return () => {
       subscription.unsubscribe();
-      supabase.removeChannel(scoresSubscription);
     };
-  }, []);
+  }, [fetchAllData]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -179,7 +149,6 @@ const App: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     setAuthError('');
-
     try {
       if (isRegistering) {
         const { error } = await supabase.auth.signUp({
@@ -210,8 +179,7 @@ const App: React.FC = () => {
       is_locked: e.isLocked,
       event_admin_id: currentUser?.id
     }]).select();
-    if (error) console.error(error);
-    else if (data) setEvents(prev => [...prev, mapEvent(data[0])]);
+    if (!error && data) setEvents(prev => [...prev, mapEvent(data[0])]);
   };
 
   const updateEvent = async (e: Event) => {
@@ -220,8 +188,7 @@ const App: React.FC = () => {
       is_locked: e.isLocked,
       criteria: e.criteria
     }).eq('id', e.id);
-    if (error) console.error(error);
-    else setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev));
+    if (!error) setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev));
   };
 
   const addParticipant = async (p: Participant) => {
@@ -230,8 +197,7 @@ const App: React.FC = () => {
       district: p.district,
       event_id: p.eventId
     }]).select();
-    if (error) console.error(error);
-    else if (data) setParticipants(prev => [...prev, mapParticipant(data[0])]);
+    if (!error && data) setParticipants(prev => [...prev, mapParticipant(data[0])]);
   };
 
   const updateParticipant = async (p: Participant) => {
@@ -239,18 +205,16 @@ const App: React.FC = () => {
       name: p.name,
       district: p.district
     }).eq('id', p.id);
-    if (error) console.error(error);
-    else setParticipants(prev => prev.map(part => part.id === p.id ? p : part));
+    if (!error) setParticipants(prev => prev.map(part => part.id === p.id ? p : part));
   };
 
   const deleteParticipant = async (id: string) => {
     const { error } = await supabase.from('participants').delete().eq('id', id);
-    if (error) console.error(error);
-    else setParticipants(prev => prev.filter(p => p.id !== id));
+    if (!error) setParticipants(prev => prev.filter(p => p.id !== id));
   };
 
   const submitScore = async (s: Score) => {
-    const { error } = await supabase.from('scores').upsert({
+    await supabase.from('scores').upsert({
       id: s.id,
       judge_id: s.judgeId,
       participant_id: s.participantId,
@@ -259,7 +223,6 @@ const App: React.FC = () => {
       total_score: s.totalScore,
       critique: s.critique
     });
-    if (error) console.error(error);
   };
 
   const addJudge = async (u: any) => {
@@ -270,14 +233,14 @@ const App: React.FC = () => {
       assigned_event_id: u.assigned_event_id,
       email: u.email
     }]).select();
-    if (error) console.error(error);
-    else if (data) setUsers(prev => [...prev, mapUser(data[0])]);
+    if (!error && data) {
+      setUsers(prev => [...prev, mapUser(data[0])]);
+    }
   };
 
   const removeJudge = async (id: string) => {
     const { error } = await supabase.from('profiles').delete().eq('id', id);
-    if (error) console.error(error);
-    else setUsers(prev => prev.filter(u => u.id !== id));
+    if (!error) setUsers(prev => prev.filter(u => u.id !== id));
   };
 
   if (loading) {
@@ -302,47 +265,23 @@ const App: React.FC = () => {
           <form onSubmit={handleAuth} className="space-y-4">
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</label>
-              <input 
-                type="email" 
-                required
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white"
-                value={loginCreds.email}
-                onChange={e => setLoginCreds({...loginCreds, email: e.target.value})}
-              />
+              <input type="email" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.email} onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} />
             </div>
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
-              <input 
-                type="password" 
-                required
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white"
-                value={loginCreds.password}
-                onChange={e => setLoginCreds({...loginCreds, password: e.target.value})}
-              />
+              <input type="password" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
             </div>
-            
             {authError && <p className="text-xs text-red-400 font-bold text-center">{authError}</p>}
-
-            <button 
-              type="submit"
-              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 border border-blue-400/20 group overflow-hidden relative"
-            >
+            <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 border border-blue-400/20 group overflow-hidden relative">
               <span className="relative z-10">{isRegistering ? 'Initialize Admin Account' : 'Sign In'}</span>
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
             </button>
           </form>
 
           <div className="text-center">
-            <button 
-              onClick={() => setIsRegistering(!isRegistering)}
-              className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors"
-            >
+            <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors">
               {isRegistering ? 'Already have an account? Log In' : 'First time? Create initial admin'}
             </button>
-          </div>
-          
-          <div className="pt-6 border-t border-white/10 text-center text-slate-500 text-[10px] uppercase font-bold tracking-widest">
-            Regional Management Portal
           </div>
         </div>
       </div>
