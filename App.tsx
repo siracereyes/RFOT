@@ -54,66 +54,100 @@ const App: React.FC = () => {
     assignedEventId: db.assigned_event_id
   });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [
-          { data: eventsData },
-          { data: partsData },
-          { data: scoresData },
-          { data: profilesData }
-        ] = await Promise.all([
-          supabase.from('events').select('*'),
-          supabase.from('participants').select('*'),
-          supabase.from('scores').select('*'),
-          supabase.from('profiles').select('*')
-        ]);
+  // Separate function to handle profile resolution
+  const resolveProfile = async (authSession: any) => {
+    if (!authSession?.user) {
+      setCurrentUser(null);
+      return;
+    }
 
-        if (eventsData) setEvents(eventsData.map(mapEvent));
-        if (partsData) setParticipants(partsData.map(mapParticipant));
-        if (scoresData) setScores(scoresData.map(mapScore));
-        if (profilesData) setUsers(profilesData.map(mapUser));
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authSession.user.id)
+        .single();
+      
+      if (profile) {
+        setCurrentUser(mapUser(profile));
+      } else {
+        const fallbackUser: User = {
+          id: authSession.user.id,
+          name: authSession.user.email?.split('@')[0] || 'Super Admin',
+          role: UserRole.SUPER_ADMIN,
+          email: authSession.user.email || ''
+        };
+        setCurrentUser(fallbackUser);
+        
+        // Auto-create profile if missing
+        await supabase.from('profiles').upsert([{
+          id: authSession.user.id,
+          name: fallbackUser.name,
+          role: UserRole.SUPER_ADMIN,
+          email: fallbackUser.email
+        }]);
+      }
+    } catch (err) {
+      console.error("Profile resolution error:", err);
+    }
+  };
+
+  useEffect(() => {
+    const initApp = async () => {
+      try {
+        // 1. Check current session immediately
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await resolveProfile(session);
+        }
+
+        // 2. Load initial data in parallel without blocking the UI if one fails
+        const fetchData = async () => {
+          try {
+            const results = await Promise.allSettled([
+              supabase.from('events').select('*'),
+              supabase.from('participants').select('*'),
+              supabase.from('scores').select('*'),
+              supabase.from('profiles').select('*')
+            ]);
+
+            results.forEach((res, idx) => {
+              if (res.status === 'fulfilled' && res.value.data) {
+                const data = res.value.data;
+                if (idx === 0) setEvents(data.map(mapEvent));
+                if (idx === 1) setParticipants(data.map(mapParticipant));
+                if (idx === 2) setScores(data.map(mapScore));
+                if (idx === 3) setUsers(data.map(mapUser));
+              } else if (res.status === 'rejected') {
+                console.warn(`Data fetch index ${idx} failed:`, res.reason);
+              }
+            });
+          } catch (e) {
+            console.error("Background data fetch error:", e);
+          }
+        };
+
+        fetchData();
+
       } catch (e) {
-        console.error("Data fetch error", e);
+        console.error("Initialization error:", e);
+      } finally {
+        setLoading(false);
       }
     };
 
+    initApp();
+
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profile) {
-          setCurrentUser(mapUser(profile));
-        } else {
-          // Fallback: If no profile exists, this is the first Admin
-          const fallbackUser: User = {
-            id: session.user.id,
-            name: session.user.email?.split('@')[0] || 'Super Admin',
-            role: UserRole.SUPER_ADMIN,
-            email: session.user.email || ''
-          };
-          setCurrentUser(fallbackUser);
-          
-          // Optionally, auto-create the profile record if it doesn't exist
-          await supabase.from('profiles').upsert([{
-            id: session.user.id,
-            name: fallbackUser.name,
-            role: UserRole.SUPER_ADMIN,
-            email: fallbackUser.email
-          }]);
-        }
-      } else {
+      if (event === 'SIGNED_IN') {
+        await resolveProfile(session);
+      } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
       }
-      setLoading(false);
     });
 
-    fetchData();
-
+    // Real-time scores
     const scoresSubscription = supabase
       .channel('realtime_scores')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, (payload) => {
@@ -146,24 +180,24 @@ const App: React.FC = () => {
     setLoading(true);
     setAuthError('');
 
-    if (isRegistering) {
-      const { error } = await supabase.auth.signUp({
-        email: loginCreds.email,
-        password: loginCreds.password,
-      });
-      if (error) {
-        setAuthError(error.message);
-        setLoading(false);
+    try {
+      if (isRegistering) {
+        const { error } = await supabase.auth.signUp({
+          email: loginCreds.email,
+          password: loginCreds.password,
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: loginCreds.email,
+          password: loginCreds.password,
+        });
+        if (error) throw error;
       }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: loginCreds.email,
-        password: loginCreds.password,
-      });
-      if (error) {
-        setAuthError(error.message);
-        setLoading(false);
-      }
+    } catch (error: any) {
+      setAuthError(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
