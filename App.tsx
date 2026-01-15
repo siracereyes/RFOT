@@ -23,18 +23,18 @@ const App: React.FC = () => {
 
   const mapEvent = (db: any): Event => ({
     id: db.id,
-    name: db.name,
+    name: db.name || 'Unnamed Event',
     type: db.type,
     criteria: db.criteria || [],
     rounds: db.rounds || [],
-    isLocked: db.is_locked,
+    isLocked: !!db.is_locked,
     eventAdminId: db.event_admin_id
   });
 
   const mapParticipant = (db: any): Participant => ({
     id: db.id,
-    name: db.name,
-    district: db.district,
+    name: db.name || 'Unnamed Participant',
+    district: db.district || 'Unknown District',
     eventId: db.event_id
   });
 
@@ -43,15 +43,16 @@ const App: React.FC = () => {
     judgeId: db.judge_id,
     participantId: db.participant_id,
     eventId: db.event_id,
-    criteriaScores: db.criteria_scores,
-    totalScore: db.total_score,
+    criteriaScores: db.criteria_scores || {},
+    totalScore: db.total_score || 0,
     critique: db.critique
   });
 
   const mapUser = (db: any): User => ({
     id: db.id,
-    name: db.name,
-    role: db.role,
+    name: db.name || 'Unknown User',
+    // Force uppercase to match UserRole enum exactly
+    role: (db.role || '').toUpperCase() as UserRole,
     email: db.email || '',
     assignedEventId: db.assigned_event_id
   });
@@ -66,6 +67,9 @@ const App: React.FC = () => {
         supabase.from('profiles').select('*'),
         supabase.from('settings').select('*').eq('key', 'admin_registration_enabled').maybeSingle()
       ]);
+
+      if (eventsRes.error) console.error("Events fetch error:", eventsRes.error);
+      if (profilesRes.error) console.error("Profiles fetch error (Check RLS policies):", profilesRes.error);
 
       if (eventsRes.data) setEvents(eventsRes.data.map(mapEvent));
       if (participantsRes.data) setParticipants(participantsRes.data.map(mapParticipant));
@@ -86,10 +90,7 @@ const App: React.FC = () => {
       .from('settings')
       .upsert({ key: 'admin_registration_enabled', value: enabled.toString() }, { onConflict: 'key' });
     
-    if (error) {
-      console.error("Failed to update registration setting:", error);
-      // Optional: Add toast notification for failure
-    }
+    if (error) console.error("Failed to update registration setting:", error);
   };
 
   const resolveProfile = async (authSession: any) => {
@@ -109,7 +110,7 @@ const App: React.FC = () => {
         setCurrentUser(mapUser(profile));
       } else {
         const meta = authSession.user.user_metadata;
-        const assignedRole = meta?.role || (isRegistering ? UserRole.SUPER_ADMIN : UserRole.JUDGE);
+        const assignedRole = (meta?.role || (isRegistering ? UserRole.SUPER_ADMIN : UserRole.JUDGE)).toUpperCase();
         
         const fallbackUser: User = {
           id: authSession.user.id,
@@ -140,9 +141,7 @@ const App: React.FC = () => {
     if (initRef.current) return;
     initRef.current = true;
 
-    const failSafe = setTimeout(() => {
-      setAuthLoading(false);
-    }, 5000);
+    const failSafe = setTimeout(() => setAuthLoading(false), 5000);
 
     const initialize = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -150,7 +149,6 @@ const App: React.FC = () => {
         await resolveProfile(session);
         await fetchAllData();
       } else {
-        // Even if not logged in, fetch settings to know if "First Time?" should be shown
         const { data: setting } = await supabase.from('settings').select('*').eq('key', 'admin_registration_enabled').maybeSingle();
         if (setting) setRegistrationEnabled(setting.value === 'true');
       }
@@ -186,13 +184,9 @@ const App: React.FC = () => {
     window.location.href = '/'; 
   };
 
-  const [loginCreds, setLoginCreds] = useState({ email: '', password: '' });
-  const [authError, setAuthError] = useState('');
-
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
-    setAuthError('');
     try {
       if (isRegistering) {
         const { error } = await supabase.auth.signUp({
@@ -209,10 +203,12 @@ const App: React.FC = () => {
         if (error) throw error;
       }
     } catch (error: any) {
-      setAuthError(error.message);
+      alert(error.message);
       setAuthLoading(false);
     }
   };
+
+  const [loginCreds, setLoginCreds] = useState({ email: '', password: '' });
 
   const addEvent = async (e: Event) => {
     const { data, error } = await supabase.from('events').insert([{
@@ -273,18 +269,12 @@ const App: React.FC = () => {
       .upsert(payload)
       .select();
 
-    if (error) {
-      console.error("Score submission error:", error);
-      throw error;
-    }
-
+    if (error) throw error;
     const savedScore = mapScore(data[0]);
-
     setScores(prev => {
       const filtered = prev.filter(score => score.id !== savedScore.id);
       return [...filtered, savedScore];
     });
-
     return data;
   };
 
@@ -318,7 +308,6 @@ const App: React.FC = () => {
             <h1 className="text-4xl font-black font-header tracking-tight text-white">RFOT <span className="text-blue-400">2024</span></h1>
             <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring System</p>
           </div>
-          
           <form onSubmit={handleAuth} className="space-y-4">
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</label>
@@ -328,13 +317,11 @@ const App: React.FC = () => {
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
               <input type="password" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
             </div>
-            {authError && <p className="text-xs text-red-400 font-bold text-center">{authError}</p>}
             <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 border border-blue-400/20 group overflow-hidden relative">
               <span className="relative z-10">{isRegistering ? 'Initialize Admin Account' : 'Sign In'}</span>
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
             </button>
           </form>
-
           {registrationEnabled && (
             <div className="text-center">
               <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors">
@@ -363,12 +350,7 @@ const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>
-      <style>{`
-        @keyframes loading {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(300%); }
-        }
-      `}</style>
+      <style>{`@keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }`}</style>
     </Router>
   );
 };

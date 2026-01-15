@@ -1,6 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
-// Fix: Removed ToggleLeft as ToggleIcon alias which caused ToggleLeft to be undefined in scope
+import React, { useState, useEffect, useMemo } from 'react';
 import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, Trash2, Key, UserCheck, Loader2, Save, Mail, ShieldCheck, AlertTriangle, Settings, ToggleLeft, ToggleRight } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score } from '../types';
@@ -57,6 +56,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newPartName, setNewPartName] = useState('');
   const [newPartDistrict, setNewPartDistrict] = useState(SDO_LIST[0]);
   const [newJudgePass, setNewJudgePass] = useState('');
+
+  // Robustly filter judges - check both enum and string match for safety
+  const judges = useMemo(() => 
+    users.filter(u => u.role === UserRole.JUDGE || u.role?.toString().toUpperCase() === 'JUDGE'),
+    [users]
+  );
+  
+  const admins = useMemo(() => 
+    users.filter(u => u.role === UserRole.SUPER_ADMIN || u.role === UserRole.EVENT_ADMIN),
+    [users]
+  );
 
   useEffect(() => {
     if (editingEventId) {
@@ -116,8 +126,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setShowEnrollModal(null); setNewPartName('');
   };
 
-  const judges = users.filter(u => u.role === UserRole.JUDGE);
-  const adminCount = users.filter(u => u.role === UserRole.SUPER_ADMIN || u.role === UserRole.EVENT_ADMIN).length;
+  const getTabLabel = (tab: string) => {
+    let count = 0;
+    if (tab === 'events') count = events.length;
+    if (tab === 'judges') count = judges.length;
+    if (tab === 'results') count = scores.length;
+    
+    return (
+      <span className="flex items-center gap-2">
+        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+        {count > 0 && (
+          <span className="px-1.5 py-0.5 rounded-md bg-blue-500/10 text-[8px] border border-blue-500/20 text-blue-400">
+            {count}
+          </span>
+        )}
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-24">
@@ -127,7 +152,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex gap-4 mt-4 overflow-x-auto pb-2 scrollbar-hide">
             {['events', 'judges', 'results', 'system'].map((t) => (
               <button key={t} onClick={() => setActiveTab(t as any)} className={`pb-2 px-1 text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === t ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-500 hover:text-slate-300'}`}>
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {getTabLabel(t)}
               </button>
             ))}
           </div>
@@ -157,7 +182,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="space-y-1">
                   <p className="font-bold text-white text-lg">Admin Self-Registration</p>
                   <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
-                    When enabled, the "First time? Create initial admin" link will appear on the login page. Disable this once initial setup is complete.
+                    When enabled, the "First time? Create initial admin" link will appear on the login page.
                   </p>
                 </div>
                 <button 
@@ -172,62 +197,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {registrationEnabled ? 'Publicly Visible' : 'Hidden / Locked'}
                 </button>
               </div>
-
-              <div className="p-6 bg-blue-500/5 border border-blue-500/10 rounded-[2rem] flex items-start gap-4">
-                <AlertTriangle className="text-blue-400 mt-1 shrink-0" size={20} />
-                <div className="space-y-1">
-                   <p className="text-sm font-bold text-blue-200">Security Recommendation</p>
-                   <p className="text-xs text-blue-400/70 leading-relaxed">
-                     It is highly recommended to disable self-registration once you have created your primary administrative accounts to prevent unauthorized access to the scoring console.
-                   </p>
-                </div>
-              </div>
             </div>
           </div>
 
           <div className="space-y-6">
             <div className="glass-card p-8 rounded-[2.5rem] border border-white/10 shadow-xl text-center space-y-4">
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Privileged Accounts</p>
-              <div className="text-6xl font-black font-header text-white">{adminCount}</div>
+              <div className="text-6xl font-black font-header text-white">{admins.length}</div>
               <p className="text-sm font-bold text-slate-400">Registered Administrators</p>
-              <div className="pt-4 border-t border-white/5 flex justify-center gap-4">
-                 <div className="flex flex-col items-center">
-                    <span className="text-xs font-black text-indigo-400">{judges.length}</span>
-                    <span className="text-[8px] uppercase tracking-widest font-bold text-slate-600">Judges</span>
-                 </div>
-                 <div className="w-px h-8 bg-white/5"></div>
-                 <div className="flex flex-col items-center">
-                    <span className="text-xs font-black text-blue-400">{events.length}</span>
-                    <span className="text-[8px] uppercase tracking-widest font-bold text-slate-600">Events</span>
-                 </div>
-              </div>
-            </div>
-
-            <div className="glass-card p-8 rounded-[2.5rem] border border-white/10 shadow-xl bg-gradient-to-br from-indigo-500/5 to-transparent">
-              <div className="flex items-center gap-3 mb-4">
-                <Settings size={18} className="text-indigo-400" />
-                <h4 className="text-xs font-black uppercase tracking-widest text-white">System Status</h4>
-              </div>
-              <div className="space-y-3">
-                 <div className="flex justify-between items-center text-[10px]">
-                   <span className="text-slate-500 font-bold uppercase">DB Connection</span>
-                   <span className="text-emerald-400 font-black tracking-widest uppercase flex items-center gap-1.5">
-                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Active
-                   </span>
-                 </div>
-                 <div className="flex justify-between items-center text-[10px]">
-                   <span className="text-slate-500 font-bold uppercase">Auth Service</span>
-                   <span className="text-emerald-400 font-black tracking-widest uppercase flex items-center gap-1.5">
-                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Online
-                   </span>
-                 </div>
-                 <div className="flex justify-between items-center text-[10px]">
-                   <span className="text-slate-500 font-bold uppercase">AI Insights</span>
-                   <span className="text-blue-400 font-black tracking-widest uppercase flex items-center gap-1.5">
-                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Ready
-                   </span>
-                 </div>
-              </div>
             </div>
           </div>
         </div>
@@ -278,9 +255,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </thead>
             <tbody className="divide-y divide-white/5">
               {judges.length === 0 ? (
-                <tr><td colSpan={3} className="px-8 py-20 text-center text-slate-600 italic">No judges registered.</td></tr>
+                <tr>
+                  <td colSpan={3} className="px-8 py-32 text-center">
+                    <div className="flex flex-col items-center space-y-4 opacity-40">
+                      <Users size={48} className="text-slate-500" />
+                      <div>
+                        <p className="text-lg font-bold text-white">No Judges Registered</p>
+                        <p className="text-xs text-slate-500 max-w-xs mx-auto mt-2">Create judge accounts below to start assigning ballots for competitions.</p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
               ) : judges.map(judge => (
-                <tr key={judge.id} className="hover:bg-white/5 transition-colors group">
+                <tr key={judge.id || Math.random().toString()} className="hover:bg-white/5 transition-colors group">
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-4">
                        <div className="w-10 h-10 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-black">
@@ -293,7 +280,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </td>
                   <td className="px-8 py-6">
-                    <span className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest">
+                    <span className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
                       {events.find(e => e.id === judge.assignedEventId)?.name || 'Unassigned'}
                     </span>
                   </td>
@@ -307,8 +294,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ))}
             </tbody>
           </table>
-          <div className="p-6 border-t border-white/5 flex justify-end">
-             <button onClick={() => setShowJudgeModal(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all text-sm">
+          <div className="p-6 border-t border-white/5 flex justify-end bg-white/2">
+             <button onClick={() => setShowJudgeModal(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all text-sm shadow-xl shadow-indigo-600/20">
                 <UserPlus size={18} /> Register New Judge
              </button>
           </div>
@@ -393,7 +380,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-2xl mb-6 flex items-start gap-3">
               <ShieldCheck className="text-blue-500 shrink-0 mt-0.5" size={18} />
               <p className="text-[10px] text-blue-200/70 font-bold uppercase tracking-widest leading-relaxed">
-                Background Registration: You will remain logged in as Admin while creating this account.
+                Auth remains active as Admin during this creation.
               </p>
             </div>
 
