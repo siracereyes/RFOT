@@ -52,7 +52,7 @@ const App: React.FC = () => {
     id: db.id,
     name: db.name || 'Unknown User',
     role: (db.role || '').toUpperCase() as UserRole,
-    email: db.email || '',
+    email: db.email || '', 
     assignedEventId: db.assigned_event_id
   });
 
@@ -80,14 +80,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const toggleRegistration = async (enabled: boolean) => {
-    setRegistrationEnabled(enabled);
-    const { error } = await supabase
-      .from('settings')
-      .upsert({ key: 'admin_registration_enabled', value: enabled.toString() }, { onConflict: 'key' });
-    if (error) console.error("Setting update failed:", error);
-  };
-
   const resolveProfile = async (authSession: any) => {
     if (!authSession?.user) {
       setCurrentUser(null);
@@ -101,7 +93,9 @@ const App: React.FC = () => {
         .maybeSingle();
       
       if (profile) {
-        setCurrentUser(mapUser(profile));
+        const mapped = mapUser(profile);
+        if (!mapped.email) mapped.email = authSession.user.email || '';
+        setCurrentUser(mapped);
       } else {
         const meta = authSession.user.user_metadata;
         const assignedRole = (meta?.role || (isRegistering ? UserRole.SUPER_ADMIN : UserRole.JUDGE)).toUpperCase();
@@ -120,7 +114,6 @@ const App: React.FC = () => {
           id: authSession.user.id,
           name: fallbackUser.name,
           role: fallbackUser.role,
-          email: fallbackUser.email,
           assigned_event_id: fallbackUser.assignedEventId
         }]);
         if (error) console.error("Initial profile creation failed:", error);
@@ -161,15 +154,18 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     setAuthLoading(true);
     await supabase.auth.signOut();
-    localStorage.clear();
-    window.location.href = '/'; 
+    setCurrentUser(null);
+    setAuthLoading(false);
   };
 
   const [loginCreds, setLoginCreds] = useState({ email: '', password: '' });
 
   const addJudge = async (u: any) => {
     const { data, error } = await supabase.from('profiles').insert([{
-      id: u.id, name: u.name, role: UserRole.JUDGE, assigned_event_id: u.assigned_event_id, email: u.email
+      id: u.id, 
+      name: u.name, 
+      role: UserRole.JUDGE, 
+      assigned_event_id: u.assigned_event_id
     }]).select();
     
     if (error) {
@@ -179,6 +175,7 @@ const App: React.FC = () => {
 
     if (data) {
       const newUser = mapUser(data[0]);
+      newUser.email = u.email;
       setUsers(prev => [...prev, newUser]);
       return newUser;
     }
@@ -195,90 +192,89 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      <Layout user={currentUser || { name: 'Guest', role: UserRole.JUDGE }} onLogout={handleLogout}>
-        {dataLoading && (
-          <div className="fixed top-0 left-0 w-full h-1 bg-blue-600/20 z-[100]">
-            <div className="h-full bg-blue-500 animate-[loading_2s_ease-in-out_infinite] w-1/3 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
-          </div>
-        )}
-        <Routes>
-          {!currentUser ? (
-             <Route path="*" element={
-               <div className="min-h-[80vh] flex items-center justify-center p-6">
-                 <div className="glass-card p-10 rounded-[2.5rem] w-full max-w-md border border-white/10 shadow-2xl space-y-8 animate-in zoom-in-95 duration-500">
-                   <div className="text-center">
-                     <h1 className="text-4xl font-black font-header tracking-tight text-white">RFOT <span className="text-blue-400">2024</span></h1>
-                     <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring System</p>
-                   </div>
-                   <form onSubmit={async (e) => {
-                     e.preventDefault();
-                     setAuthLoading(true);
-                     try {
-                        const { error } = isRegistering 
-                          ? await supabase.auth.signUp({ email: loginCreds.email, password: loginCreds.password, options: { data: { role: UserRole.SUPER_ADMIN, name: 'Main Admin' } } })
-                          : await supabase.auth.signInWithPassword({ email: loginCreds.email, password: loginCreds.password });
-                        if (error) throw error;
-                     } catch (err: any) { alert(err.message); setAuthLoading(false); }
-                   }} className="space-y-4">
-                     <div>
-                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email</label>
-                       <input type="email" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.email} onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} />
-                     </div>
-                     <div>
-                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
-                       <input type="password" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
-                     </div>
-                     <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 border border-blue-400/20">
-                       {isRegistering ? 'Initialize Admin' : 'Sign In'}
-                     </button>
-                   </form>
-                   {registrationEnabled && (
-                     <div className="text-center">
-                       <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors">
-                         {isRegistering ? 'Back to Login' : 'First time? Create initial admin'}
-                       </button>
-                     </div>
-                   )}
-                 </div>
-               </div>
-             } />
-          ) : (
-            <>
-              <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} registrationEnabled={registrationEnabled} onToggleRegistration={toggleRegistration} onAddEvent={async (e) => {
-                const { data, error } = await supabase.from('events').insert([{ name: e.name, type: e.type, criteria: e.criteria, rounds: e.rounds, is_locked: e.isLocked, event_admin_id: currentUser.id }]).select();
-                if (!error && data) setEvents(prev => [...prev, mapEvent(data[0])]);
-              }} onUpdateEvent={async (e) => {
-                const { error } = await supabase.from('events').update({ name: e.name, is_locked: e.isLocked, criteria: e.criteria, rounds: e.rounds }).eq('id', e.id);
-                if (!error) setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev));
-              }} onAddParticipant={async (p) => {
-                const { data, error } = await supabase.from('participants').insert([{ name: p.name, district: p.district, event_id: p.eventId }]).select();
-                if (!error && data) setParticipants(prev => [...prev, mapParticipant(data[0])]);
-              }} onUpdateParticipant={async (p) => {
-                const { error } = await supabase.from('participants').update({ name: p.name, district: p.district }).eq('id', p.id);
-                if (!error) setParticipants(prev => prev.map(part => part.id === p.id ? p : part));
-              }} onDeleteParticipant={async (id) => {
-                const { error } = await supabase.from('participants').delete().eq('id', id);
-                if (!error) setParticipants(prev => prev.filter(p => p.id !== id));
-              }} onAddJudge={addJudge} onRemoveJudge={async (id) => {
-                const { error } = await supabase.from('profiles').delete().eq('id', id);
-                if (!error) setUsers(prev => prev.filter(u => u.id !== id));
-              }} onRefreshData={fetchAllData} />} />
-              <Route path="/events" element={<Navigate to="/" />} />
-              <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={async (s) => {
-                const { data: existing } = await supabase.from('scores').select('id').eq('judge_id', s.judgeId).eq('participant_id', s.participantId).maybeSingle();
-                const payload: any = { judge_id: s.judgeId, participant_id: s.participantId, event_id: s.eventId, criteria_scores: s.criteriaScores, total_score: s.totalScore, critique: s.critique };
-                if (existing?.id) payload.id = existing.id;
-                const { data, error } = await supabase.from('scores').upsert(payload).select();
+      {!currentUser ? (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950">
+          <div className="glass-card p-10 rounded-[2.5rem] w-full max-w-md border border-white/10 shadow-2xl space-y-8 animate-in zoom-in-95 duration-500">
+            <div className="text-center">
+              <h1 className="text-4xl font-black font-header tracking-tight text-white">RFOT <span className="text-blue-400">2024</span></h1>
+              <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring System</p>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setAuthLoading(true);
+              try {
+                const { error } = isRegistering 
+                  ? await supabase.auth.signUp({ email: loginCreds.email, password: loginCreds.password, options: { data: { role: UserRole.SUPER_ADMIN, name: 'Main Admin' } } })
+                  : await supabase.auth.signInWithPassword({ email: loginCreds.email, password: loginCreds.password });
                 if (error) throw error;
-                const savedScore = mapScore(data[0]);
-                setScores(prev => [...prev.filter(score => score.id !== savedScore.id), savedScore]);
-              }} />} />
-              <Route path="/public" element={<PublicLeaderboard events={events} participants={participants} scores={scores} />} />
-              <Route path="*" element={<Navigate to="/" />} />
-            </>
+              } catch (err: any) { alert(err.message); setAuthLoading(false); }
+            }} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email</label>
+                <input type="email" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.email} onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
+                <input type="password" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
+              </div>
+              <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 border border-blue-400/20">
+                {isRegistering ? 'Initialize Admin' : 'Sign In'}
+              </button>
+            </form>
+            {registrationEnabled && (
+              <div className="text-center">
+                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors">
+                  {isRegistering ? 'Back to Login' : 'First time? Create initial admin'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <Layout user={currentUser} onLogout={handleLogout}>
+          {dataLoading && (
+            <div className="fixed top-0 left-0 w-full h-1 bg-blue-600/20 z-[100]">
+              <div className="h-full bg-blue-500 animate-[loading_2s_ease-in-out_infinite] w-1/3 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
+            </div>
           )}
-        </Routes>
-      </Layout>
+          <Routes>
+            <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} registrationEnabled={registrationEnabled} onToggleRegistration={async (enabled) => {
+              setRegistrationEnabled(enabled);
+              await supabase.from('settings').upsert({ key: 'admin_registration_enabled', value: enabled.toString() }, { onConflict: 'key' });
+            }} onAddEvent={async (e) => {
+              const { data, error } = await supabase.from('events').insert([{ name: e.name, type: e.type, criteria: e.criteria, rounds: e.rounds, is_locked: e.isLocked, event_admin_id: currentUser.id }]).select();
+              if (!error && data) setEvents(prev => [...prev, mapEvent(data[0])]);
+            }} onUpdateEvent={async (e) => {
+              const { error } = await supabase.from('events').update({ name: e.name, is_locked: e.isLocked, criteria: e.criteria, rounds: e.rounds }).eq('id', e.id);
+              if (!error) setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev));
+            }} onAddParticipant={async (p) => {
+              const { data, error } = await supabase.from('participants').insert([{ name: p.name, district: p.district, event_id: p.eventId }]).select();
+              if (!error && data) setParticipants(prev => [...prev, mapParticipant(data[0])]);
+            }} onUpdateParticipant={async (p) => {
+              const { error } = await supabase.from('participants').update({ name: p.name, district: p.district }).eq('id', p.id);
+              if (!error) setParticipants(prev => prev.map(part => part.id === p.id ? p : part));
+            }} onDeleteParticipant={async (id) => {
+              const { error } = await supabase.from('participants').delete().eq('id', id);
+              if (!error) setParticipants(prev => prev.filter(p => p.id !== id));
+            }} onAddJudge={addJudge} onRemoveJudge={async (id) => {
+              const { error } = await supabase.from('profiles').delete().eq('id', id);
+              if (!error) setUsers(prev => prev.filter(u => u.id !== id));
+            }} onRefreshData={fetchAllData} />} />
+            <Route path="/events" element={<Navigate to="/" />} />
+            <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={async (s) => {
+              const { data: existing } = await supabase.from('scores').select('id').eq('judge_id', s.judgeId).eq('participant_id', s.participantId).maybeSingle();
+              const payload: any = { judge_id: s.judgeId, participant_id: s.participantId, event_id: s.eventId, criteria_scores: s.criteriaScores, total_score: s.totalScore, critique: s.critique };
+              if (existing?.id) payload.id = existing.id;
+              const { data, error } = await supabase.from('scores').upsert(payload).select();
+              if (error) throw error;
+              const savedScore = mapScore(data[0]);
+              setScores(prev => [...prev.filter(score => score.id !== savedScore.id), savedScore]);
+            }} />} />
+            <Route path="/public" element={<PublicLeaderboard events={events} participants={participants} scores={scores} />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Layout>
+      )}
       <style>{`@keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }`}</style>
     </Router>
   );
