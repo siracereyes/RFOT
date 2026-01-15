@@ -51,7 +51,6 @@ const App: React.FC = () => {
   const mapUser = (db: any): User => ({
     id: db.id,
     name: db.name || 'Unknown User',
-    // Force uppercase to match UserRole enum exactly
     role: (db.role || '').toUpperCase() as UserRole,
     email: db.email || '',
     assignedEventId: db.assigned_event_id
@@ -67,9 +66,6 @@ const App: React.FC = () => {
         supabase.from('profiles').select('*'),
         supabase.from('settings').select('*').eq('key', 'admin_registration_enabled').maybeSingle()
       ]);
-
-      if (eventsRes.error) console.error("Events fetch error:", eventsRes.error);
-      if (profilesRes.error) console.error("Profiles fetch error (Check RLS policies):", profilesRes.error);
 
       if (eventsRes.data) setEvents(eventsRes.data.map(mapEvent));
       if (participantsRes.data) setParticipants(participantsRes.data.map(mapParticipant));
@@ -89,8 +85,7 @@ const App: React.FC = () => {
     const { error } = await supabase
       .from('settings')
       .upsert({ key: 'admin_registration_enabled', value: enabled.toString() }, { onConflict: 'key' });
-    
-    if (error) console.error("Failed to update registration setting:", error);
+    if (error) console.error("Setting update failed:", error);
   };
 
   const resolveProfile = async (authSession: any) => {
@@ -98,7 +93,6 @@ const App: React.FC = () => {
       setCurrentUser(null);
       return;
     }
-
     try {
       const { data: profile } = await supabase
         .from('profiles')
@@ -122,15 +116,14 @@ const App: React.FC = () => {
         
         setCurrentUser(fallbackUser);
         
-        supabase.from('profiles').upsert([{
+        const { error } = await supabase.from('profiles').upsert([{
           id: authSession.user.id,
           name: fallbackUser.name,
           role: fallbackUser.role,
           email: fallbackUser.email,
           assigned_event_id: fallbackUser.assignedEventId
-        }]).then(({ error }) => {
-          if (error) console.error("Auto-profile sync failed:", error);
-        });
+        }]);
+        if (error) console.error("Initial profile creation failed:", error);
       }
     } catch (err) {
       console.error("Profile resolution error:", err);
@@ -140,22 +133,14 @@ const App: React.FC = () => {
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
-
     const failSafe = setTimeout(() => setAuthLoading(false), 5000);
-
     const initialize = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        await resolveProfile(session);
-        await fetchAllData();
-      } else {
-        const { data: setting } = await supabase.from('settings').select('*').eq('key', 'admin_registration_enabled').maybeSingle();
-        if (setting) setRegistrationEnabled(setting.value === 'true');
-      }
+      if (session) await resolveProfile(session);
+      await fetchAllData();
       setAuthLoading(false);
       clearTimeout(failSafe);
     };
-
     initialize();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -170,11 +155,7 @@ const App: React.FC = () => {
         setAuthLoading(false);
       }
     });
-
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(failSafe);
-    };
+    return () => { subscription.unsubscribe(); clearTimeout(failSafe); };
   }, [fetchAllData]);
 
   const handleLogout = async () => {
@@ -184,110 +165,23 @@ const App: React.FC = () => {
     window.location.href = '/'; 
   };
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthLoading(true);
-    try {
-      if (isRegistering) {
-        const { error } = await supabase.auth.signUp({
-          email: loginCreds.email,
-          password: loginCreds.password,
-          options: { data: { role: UserRole.SUPER_ADMIN, name: 'Main Admin' } }
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: loginCreds.email,
-          password: loginCreds.password,
-        });
-        if (error) throw error;
-      }
-    } catch (error: any) {
-      alert(error.message);
-      setAuthLoading(false);
-    }
-  };
-
   const [loginCreds, setLoginCreds] = useState({ email: '', password: '' });
-
-  const addEvent = async (e: Event) => {
-    const { data, error } = await supabase.from('events').insert([{
-      name: e.name, type: e.type, criteria: e.criteria, rounds: e.rounds, is_locked: e.isLocked, event_admin_id: currentUser?.id
-    }]).select();
-    if (!error && data) setEvents(prev => [...prev, mapEvent(data[0])]);
-  };
-
-  const updateEvent = async (e: Event) => {
-    const { error } = await supabase.from('events').update({
-      name: e.name, is_locked: e.isLocked, criteria: e.criteria
-    }).eq('id', e.id);
-    if (!error) setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev));
-  };
-
-  const addParticipant = async (p: Participant) => {
-    const { data, error } = await supabase.from('participants').insert([{
-      name: p.name, district: p.district, event_id: p.eventId
-    }]).select();
-    if (!error && data) setParticipants(prev => [...prev, mapParticipant(data[0])]);
-  };
-
-  const updateParticipant = async (p: Participant) => {
-    const { error } = await supabase.from('participants').update({
-      name: p.name, district: p.district
-    }).eq('id', p.id);
-    if (!error) setParticipants(prev => prev.map(part => part.id === p.id ? p : part));
-  };
-
-  const deleteParticipant = async (id: string) => {
-    const { error } = await supabase.from('participants').delete().eq('id', id);
-    if (!error) setParticipants(prev => prev.filter(p => p.id !== id));
-  };
-
-  const submitScore = async (s: Score) => {
-    const { data: existing } = await supabase
-      .from('scores')
-      .select('id')
-      .eq('judge_id', s.judgeId)
-      .eq('participant_id', s.participantId)
-      .maybeSingle();
-
-    const payload: any = {
-      judge_id: s.judgeId,
-      participant_id: s.participantId,
-      event_id: s.eventId,
-      criteria_scores: s.criteriaScores,
-      total_score: s.totalScore,
-      critique: s.critique
-    };
-
-    if (existing?.id) {
-      payload.id = existing.id;
-    }
-
-    const { data, error } = await supabase
-      .from('scores')
-      .upsert(payload)
-      .select();
-
-    if (error) throw error;
-    const savedScore = mapScore(data[0]);
-    setScores(prev => {
-      const filtered = prev.filter(score => score.id !== savedScore.id);
-      return [...filtered, savedScore];
-    });
-    return data;
-  };
 
   const addJudge = async (u: any) => {
     const { data, error } = await supabase.from('profiles').insert([{
       id: u.id, name: u.name, role: UserRole.JUDGE, assigned_event_id: u.assigned_event_id, email: u.email
     }]).select();
-    if (!error && data) setUsers(prev => [...prev, mapUser(data[0])]);
-  };
+    
+    if (error) {
+      console.error("Database Error (Judge Profile):", error);
+      throw error;
+    }
 
-  const removeJudge = async (id: string) => {
-    const { error } = await supabase.from('profiles').delete().eq('id', id);
-    if (!error) setUsers(prev => prev.filter(u => u.id !== id));
+    if (data) {
+      const newUser = mapUser(data[0]);
+      setUsers(prev => [...prev, newUser]);
+      return newUser;
+    }
   };
 
   if (authLoading) {
@@ -299,55 +193,90 @@ const App: React.FC = () => {
     );
   }
 
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950">
-        <div className="glass-card p-10 rounded-[2.5rem] w-full max-w-md border border-white/10 shadow-2xl space-y-8 animate-in zoom-in-95 duration-500">
-          <div className="text-center relative">
-            <div className="absolute -top-4 -left-4 w-12 h-12 bg-blue-500/20 rounded-full blur-xl animate-pulse"></div>
-            <h1 className="text-4xl font-black font-header tracking-tight text-white">RFOT <span className="text-blue-400">2024</span></h1>
-            <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring System</p>
-          </div>
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</label>
-              <input type="email" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.email} onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} />
-            </div>
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
-              <input type="password" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
-            </div>
-            <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 border border-blue-400/20 group overflow-hidden relative">
-              <span className="relative z-10">{isRegistering ? 'Initialize Admin Account' : 'Sign In'}</span>
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-            </button>
-          </form>
-          {registrationEnabled && (
-            <div className="text-center">
-              <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors">
-                {isRegistering ? 'Already have an account? Log In' : 'First time? Create initial admin'}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <Router>
-      <Layout user={currentUser} onLogout={handleLogout}>
+      <Layout user={currentUser || { name: 'Guest', role: UserRole.JUDGE }} onLogout={handleLogout}>
         {dataLoading && (
           <div className="fixed top-0 left-0 w-full h-1 bg-blue-600/20 z-[100]">
             <div className="h-full bg-blue-500 animate-[loading_2s_ease-in-out_infinite] w-1/3 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
           </div>
         )}
         <Routes>
-          <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} registrationEnabled={registrationEnabled} onToggleRegistration={toggleRegistration} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
-          <Route path="/events" element={<AdminDashboard events={events} participants={participants} users={users} scores={scores} registrationEnabled={registrationEnabled} onToggleRegistration={toggleRegistration} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
-          <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={submitScore} />} />
-          <Route path="/public" element={<PublicLeaderboard events={events} participants={participants} scores={scores} />} />
-          <Route path="*" element={<Navigate to="/" />} />
+          {!currentUser ? (
+             <Route path="*" element={
+               <div className="min-h-[80vh] flex items-center justify-center p-6">
+                 <div className="glass-card p-10 rounded-[2.5rem] w-full max-w-md border border-white/10 shadow-2xl space-y-8 animate-in zoom-in-95 duration-500">
+                   <div className="text-center">
+                     <h1 className="text-4xl font-black font-header tracking-tight text-white">RFOT <span className="text-blue-400">2024</span></h1>
+                     <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring System</p>
+                   </div>
+                   <form onSubmit={async (e) => {
+                     e.preventDefault();
+                     setAuthLoading(true);
+                     try {
+                        const { error } = isRegistering 
+                          ? await supabase.auth.signUp({ email: loginCreds.email, password: loginCreds.password, options: { data: { role: UserRole.SUPER_ADMIN, name: 'Main Admin' } } })
+                          : await supabase.auth.signInWithPassword({ email: loginCreds.email, password: loginCreds.password });
+                        if (error) throw error;
+                     } catch (err: any) { alert(err.message); setAuthLoading(false); }
+                   }} className="space-y-4">
+                     <div>
+                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email</label>
+                       <input type="email" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.email} onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} />
+                     </div>
+                     <div>
+                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
+                       <input type="password" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
+                     </div>
+                     <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 border border-blue-400/20">
+                       {isRegistering ? 'Initialize Admin' : 'Sign In'}
+                     </button>
+                   </form>
+                   {registrationEnabled && (
+                     <div className="text-center">
+                       <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors">
+                         {isRegistering ? 'Back to Login' : 'First time? Create initial admin'}
+                       </button>
+                     </div>
+                   )}
+                 </div>
+               </div>
+             } />
+          ) : (
+            <>
+              <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} registrationEnabled={registrationEnabled} onToggleRegistration={toggleRegistration} onAddEvent={async (e) => {
+                const { data, error } = await supabase.from('events').insert([{ name: e.name, type: e.type, criteria: e.criteria, rounds: e.rounds, is_locked: e.isLocked, event_admin_id: currentUser.id }]).select();
+                if (!error && data) setEvents(prev => [...prev, mapEvent(data[0])]);
+              }} onUpdateEvent={async (e) => {
+                const { error } = await supabase.from('events').update({ name: e.name, is_locked: e.isLocked, criteria: e.criteria, rounds: e.rounds }).eq('id', e.id);
+                if (!error) setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev));
+              }} onAddParticipant={async (p) => {
+                const { data, error } = await supabase.from('participants').insert([{ name: p.name, district: p.district, event_id: p.eventId }]).select();
+                if (!error && data) setParticipants(prev => [...prev, mapParticipant(data[0])]);
+              }} onUpdateParticipant={async (p) => {
+                const { error } = await supabase.from('participants').update({ name: p.name, district: p.district }).eq('id', p.id);
+                if (!error) setParticipants(prev => prev.map(part => part.id === p.id ? p : part));
+              }} onDeleteParticipant={async (id) => {
+                const { error } = await supabase.from('participants').delete().eq('id', id);
+                if (!error) setParticipants(prev => prev.filter(p => p.id !== id));
+              }} onAddJudge={addJudge} onRemoveJudge={async (id) => {
+                const { error } = await supabase.from('profiles').delete().eq('id', id);
+                if (!error) setUsers(prev => prev.filter(u => u.id !== id));
+              }} onRefreshData={fetchAllData} />} />
+              <Route path="/events" element={<Navigate to="/" />} />
+              <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={async (s) => {
+                const { data: existing } = await supabase.from('scores').select('id').eq('judge_id', s.judgeId).eq('participant_id', s.participantId).maybeSingle();
+                const payload: any = { judge_id: s.judgeId, participant_id: s.participantId, event_id: s.eventId, criteria_scores: s.criteriaScores, total_score: s.totalScore, critique: s.critique };
+                if (existing?.id) payload.id = existing.id;
+                const { data, error } = await supabase.from('scores').upsert(payload).select();
+                if (error) throw error;
+                const savedScore = mapScore(data[0]);
+                setScores(prev => [...prev.filter(score => score.id !== savedScore.id), savedScore]);
+              }} />} />
+              <Route path="/public" element={<PublicLeaderboard events={events} participants={participants} scores={scores} />} />
+              <Route path="*" element={<Navigate to="/" />} />
+            </>
+          )}
         </Routes>
       </Layout>
       <style>{`@keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }`}</style>
