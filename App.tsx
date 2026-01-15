@@ -110,7 +110,6 @@ const App: React.FC = () => {
         
         setCurrentUser(fallbackUser);
         
-        // Background sync to DB
         supabase.from('profiles').upsert([{
           id: authSession.user.id,
           name: fallbackUser.name,
@@ -126,11 +125,22 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSessionChange = useCallback(async (session: any) => {
+    if (session) {
+      await resolveProfile(session);
+      await fetchAllData();
+    } else {
+      setCurrentUser(null);
+      setUsers([]);
+      setEvents([]);
+    }
+    setAuthLoading(false);
+  }, [fetchAllData]);
+
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
-    // 1. Set a fail-safe timeout
     const failSafe = setTimeout(() => {
       setAuthLoading(false);
     }, 5000);
@@ -201,7 +211,6 @@ const App: React.FC = () => {
     }
   };
 
-  // State update handlers
   const addEvent = async (e: Event) => {
     const { data, error } = await supabase.from('events').insert([{
       name: e.name, type: e.type, criteria: e.criteria, rounds: e.rounds, is_locked: e.isLocked, event_admin_id: currentUser?.id
@@ -236,9 +245,31 @@ const App: React.FC = () => {
   };
 
   const submitScore = async (s: Score) => {
-    await supabase.from('scores').upsert({
-      id: s.id, judge_id: s.judgeId, participant_id: s.participantId, event_id: s.eventId, criteria_scores: s.criteriaScores, total_score: s.totalScore, critique: s.critique
+    const { data, error } = await supabase.from('scores').upsert({
+      id: s.id,
+      judge_id: s.judgeId,
+      participant_id: s.participantId,
+      event_id: s.eventId,
+      criteria_scores: s.criteriaScores,
+      total_score: s.totalScore,
+      critique: s.critique
+    }).select();
+
+    if (error) {
+      console.error("Score submission error:", error);
+      throw error;
+    }
+
+    // Optimistically update local state so the judge sees the "Submitted" badge immediately
+    setScores(prev => {
+      const exists = prev.some(score => score.id === s.id);
+      if (exists) {
+        return prev.map(score => score.id === s.id ? s : score);
+      }
+      return [...prev, s];
     });
+
+    return data;
   };
 
   const addJudge = async (u: any) => {

@@ -10,17 +10,17 @@ interface ScoreCardProps {
   isLocked: boolean;
   initialScores?: Record<string, number>;
   initialCritique?: string;
-  onSave: (scores: Record<string, number>, critique?: string) => void;
+  onSave: (scores: Record<string, number>, critique?: string) => Promise<void>;
 }
 
 const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, initialScores = {}, initialCritique = '', onSave }) => {
   const [scores, setScores] = useState<Record<string, number>>(initialScores);
   const [critique, setCritique] = useState(initialCritique);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const total = criteria.reduce((sum, c) => sum + (scores[c.id] || 0), 0);
   const maxPossible = criteria.reduce((sum, c) => sum + c.weight, 0);
-  const percentage = (total / maxPossible) * 100;
 
   const handleScoreChange = (id: string, value: string, max: number) => {
     let num = parseFloat(value) || 0;
@@ -33,6 +33,15 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, 
     }));
   };
 
+  const handleSaveInternal = async () => {
+    setIsSaving(true);
+    try {
+      await onSave(scores, critique);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const generateCritique = async () => {
     if (total === 0) {
       alert("Please enter some scores before generating a critique.");
@@ -41,7 +50,6 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, 
     
     setIsGenerating(true);
     try {
-      // Fix: Use process.env.API_KEY directly as per guidelines
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `Act as a professional talent judge for the "Regional Festival of Talents". 
       The participant ${participant.name} from ${participant.district} received the following scores:
@@ -104,12 +112,12 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, 
               <div className="relative">
                 <input
                   type="number"
-                  disabled={isLocked}
+                  disabled={isLocked || isSaving}
                   value={scores[c.id] || ''}
                   onChange={(e) => handleScoreChange(c.id, e.target.value, c.weight)}
                   placeholder={`0.0`}
                   className={`w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-center focus:border-blue-500/50 outline-none transition-all placeholder:text-slate-800 ${
-                    isLocked ? 'opacity-50 cursor-not-allowed' : ''
+                    isLocked || isSaving ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 />
                 <div 
@@ -128,7 +136,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, 
             </label>
             <button 
               onClick={generateCritique}
-              disabled={isLocked || isGenerating}
+              disabled={isLocked || isGenerating || isSaving}
               className="text-[10px] font-black uppercase tracking-widest text-blue-400 hover:text-blue-300 flex items-center gap-2 bg-blue-400/10 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-30 shadow-sm"
             >
               {isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
@@ -138,27 +146,27 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ participant, criteria, isLocked, 
           <textarea
             value={critique}
             onChange={(e) => setCritique(e.target.value)}
-            disabled={isLocked}
+            disabled={isLocked || isSaving}
             placeholder="Describe strengths and areas for improvement..."
             className="w-full h-32 bg-white/5 border border-white/10 rounded-2xl p-5 text-sm text-slate-300 focus:border-blue-500/50 outline-none resize-none transition-all placeholder:text-slate-700 leading-relaxed"
           />
         </div>
 
         <button
-          disabled={isLocked}
-          onClick={() => onSave(scores, critique)}
+          disabled={isLocked || isSaving}
+          onClick={handleSaveInternal}
           className={`w-full py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 transition-all ${
-            isLocked 
+            isLocked || isSaving
               ? 'bg-slate-900 text-slate-600 cursor-not-allowed border border-white/5' 
               : 'bg-blue-600 hover:bg-blue-500 text-white shadow-2xl shadow-blue-600/30 active:scale-[0.98]'
           }`}
         >
-          <Save size={20} />
-          Submit Evaluation Ballot
+          {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+          {isSaving ? 'Submitting Ballot...' : 'Submit Evaluation Ballot'}
         </button>
       </div>
       
-      {isLocked && (
+      {isLocked && !isSaving && (
         <div className="py-3 bg-red-500/10 text-red-400 text-center text-[10px] font-black border-t border-red-500/20 tracking-[0.3em] uppercase">
           Locked for Modification
         </div>

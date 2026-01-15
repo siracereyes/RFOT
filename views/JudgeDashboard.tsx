@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import ScoreCard from '../components/ScoreCard';
-import { Search, Filter, CheckCircle, Award, LayoutGrid, List } from 'lucide-react';
+import { Search, Filter, CheckCircle, Award, LayoutGrid, List, Loader2 } from 'lucide-react';
 import { Event, Participant, Score, User, UserRole } from '../types';
 
 interface JudgeDashboardProps {
@@ -9,16 +9,16 @@ interface JudgeDashboardProps {
   participants: Participant[];
   judge: User;
   scores: Score[];
-  onSubmitScore: (score: Score) => void;
+  onSubmitScore: (score: Score) => Promise<any>;
 }
 
 const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, judge, scores, onSubmitScore }) => {
-  // Filter events to only show the one assigned to the judge
   const assignedEvents = events.filter(e => e.id === judge.assignedEventId);
   
   const [selectedEventId, setSelectedEventId] = useState<string>(assignedEvents.length > 0 ? assignedEvents[0].id : '');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const currentEvent = assignedEvents.find(e => e.id === selectedEventId);
   
@@ -29,7 +29,8 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
     )
   );
 
-  const handleSaveScore = (participantId: string, criteriaScores: Record<string, number>, critique?: string) => {
+  const handleSaveScore = async (participantId: string, criteriaScores: Record<string, number>, critique?: string) => {
+    setIsSubmitting(true);
     const totalScore = Object.values(criteriaScores).reduce((sum, s) => sum + s, 0);
     
     const newScore: Score = {
@@ -42,8 +43,14 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
       critique
     };
 
-    onSubmitScore(newScore);
-    alert('Ballot submitted and recorded successfully.');
+    try {
+      await onSubmitScore(newScore);
+      alert('Ballot submitted and recorded successfully.');
+    } catch (error: any) {
+      alert('Failed to submit ballot: ' + (error.message || 'Unknown error'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getParticipantScore = (participantId: string) => {
@@ -128,7 +135,7 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
                   <ScoreCard 
                     participant={participant} 
                     criteria={currentEvent.criteria} 
-                    isLocked={currentEvent.isLocked} 
+                    isLocked={currentEvent.isLocked || isSubmitting} 
                     initialScores={existingScore?.criteriaScores}
                     initialCritique={existingScore?.critique}
                     onSave={(scores, critique) => handleSaveScore(participant.id, scores, critique)}
