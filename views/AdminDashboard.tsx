@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, GitBranch, Trash2, Key, UserCheck, BarChart4, ClipboardList, Info, Star, Medal, ScrollText, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, GitBranch, Trash2, Key, UserCheck, BarChart4, ClipboardList, Info, Star, Medal, ScrollText, ChevronDown, ChevronUp, Loader2, Save } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score } from '../types';
 import { SDO_LIST } from '../constants';
@@ -40,103 +40,83 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null);
   const [showJudgeModal, setShowJudgeModal] = useState(false);
   const [selectedResultEventId, setSelectedResultEventId] = useState<string>(events.length > 0 ? events[0].id : '');
-  const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const toggleEventExpand = (id: string) => {
-    setExpandedEvents(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
+  // Form states for Event
   const [eventName, setEventName] = useState('');
   const [eventType, setEventType] = useState<EventType>(EventType.JUDGING);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
-  const [numRounds, setNumRounds] = useState<number>(3);
-  const [hasTieBreak, setHasTieBreak] = useState<boolean>(true);
 
+  // Form states for Judge
   const [judgeEmail, setJudgeEmail] = useState('');
   const [judgePassword, setJudgePassword] = useState('');
   const [judgeName, setJudgeName] = useState('');
   const [assignedEventId, setAssignedEventId] = useState('');
 
+  // Form states for Participant
   const [newPartName, setNewPartName] = useState('');
   const [newPartDistrict, setNewPartDistrict] = useState(SDO_LIST[0]);
 
-  // Calculations for results...
-  const masterEventData = useMemo(() => {
-    return events.map(event => {
-      const eventParticipants = participants.filter(p => p.eventId === event.id);
-      const eventScores = scores.filter(s => s.eventId === event.id);
-      const judgesInvolved = [...new Set(eventScores.map(s => s.judgeId))] as string[];
-      
-      const judgeRanks: Record<string, Record<string, number>> = {};
-      judgesInvolved.forEach(jId => {
-        const jScores = eventScores.filter(s => s.judgeId === jId);
-        const sorted = [...jScores].sort((a, b) => b.totalScore - a.totalScore);
-        judgeRanks[jId] = {};
-        sorted.forEach((s, i) => {
-          judgeRanks[jId][s.participantId] = i + 1;
-        });
-        eventParticipants.forEach(p => {
-          if (!judgeRanks[jId][p.id]) judgeRanks[jId][p.id] = eventParticipants.length || 0;
-        });
+  // Load event data for editing
+  useEffect(() => {
+    if (editingEventId) {
+      const ev = events.find(e => e.id === editingEventId);
+      if (ev) {
+        setEventName(ev.name);
+        setEventType(ev.type);
+        setCriteria(ev.criteria);
+        setShowWizard(true);
+      }
+    }
+  }, [editingEventId, events]);
+
+  const handleSaveEvent = () => {
+    if (!eventName || criteria.length === 0) {
+      alert("Please provide an event name and at least one criterion.");
+      return;
+    }
+
+    const totalWeight = criteria.reduce((sum, c) => sum + c.weight, 0);
+    if (totalWeight !== 100) {
+      alert("Total criteria weight must equal 100%.");
+      return;
+    }
+
+    if (editingEventId) {
+      onUpdateEvent({
+        id: editingEventId,
+        name: eventName,
+        type: eventType,
+        criteria: criteria,
+        isLocked: events.find(e => e.id === editingEventId)?.isLocked || false,
+        eventAdminId: '' // Handled by App.tsx
       });
-
-      const processed = eventParticipants.map(p => {
-        let rankSum = 0;
-        judgesInvolved.forEach(jId => { rankSum += judgeRanks[jId][p.id]; });
-        const pScores = eventScores.filter(s => s.participantId === p.id);
-        const avg = pScores.length > 0 ? pScores.reduce((sum, s) => sum + s.totalScore, 0) / pScores.length : 0;
-        
-        return { 
-          ...p, 
-          rankSum, 
-          averageRaw: avg,
-          individualRanks: judgesInvolved.map(jId => ({ 
-            judgeName: users.find(u => u.id === jId)?.name || 'Judge', 
-            rank: judgeRanks[jId][p.id] 
-          }))
-        };
-      }).sort((a, b) => {
-        if (event.type === EventType.JUDGING) {
-          if (a.rankSum !== b.rankSum) return a.rankSum - b.rankSum;
-          return b.averageRaw - a.averageRaw;
-        }
-        return b.averageRaw - a.averageRaw;
+    } else {
+      onAddEvent({
+        id: Math.random().toString(36).substr(2, 9),
+        name: eventName,
+        type: eventType,
+        criteria: criteria,
+        isLocked: false,
+        eventAdminId: '' // Handled by App.tsx
       });
+    }
 
-      return {
-        event,
-        judges: judgesInvolved.map(jId => users.find(u => u.id === jId)?.name || 'Judge'),
-        results: processed
-      };
-    });
-  }, [events, participants, scores, users]);
+    resetForm();
+  };
 
-  const overallStandings = useMemo(() => {
-    const sdoPoints: Record<string, { gold: number, silver: number, bronze: number, points: number }> = {};
-    SDO_LIST.forEach(sdo => sdoPoints[sdo] = { gold: 0, silver: 0, bronze: 0, points: 0 });
-
-    masterEventData.forEach(data => {
-      const results = data.results;
-      if (results.length === 0) return;
-      if (results[0]) { sdoPoints[results[0].district].gold++; sdoPoints[results[0].district].points += 5; }
-      if (results[1]) { sdoPoints[results[1].district].silver++; sdoPoints[results[1].district].points += 3; }
-      if (results[2]) { sdoPoints[results[2].district].bronze++; sdoPoints[results[2].district].points += 1; }
-    });
-
-    return Object.entries(sdoPoints)
-      .map(([name, stats]) => ({ name, ...stats }))
-      .sort((a, b) => b.points - a.points || b.gold - a.gold);
-  }, [masterEventData]);
-
-  const resultsData = masterEventData.find(d => d.event.id === selectedResultEventId);
+  const resetForm = () => { 
+    setShowWizard(false); 
+    setEditingEventId(null); 
+    setEventName(''); 
+    setCriteria([]); 
+    setEventType(EventType.JUDGING); 
+  };
 
   const handleCreateJudge = async () => {
     if (!judgeEmail || !judgePassword || !assignedEventId || !judgeName) return alert("Fill all details.");
     setIsSubmitting(true);
     
-    // In a real scenario, you'd use a service role or invite flow. 
-    // Here we use signUp which is usually restricted or handled via a dedicated profiles table.
     const { data, error } = await supabase.auth.signUp({
       email: judgeEmail,
       password: judgePassword,
@@ -148,7 +128,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (error) {
       alert(error.message);
     } else if (data.user) {
-      // Manual sync to profiles table if no DB trigger is set
       await onAddJudge({
         id: data.user.id,
         name: judgeName,
@@ -160,8 +139,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     setIsSubmitting(false);
   };
-
-  const resetForm = () => { setShowWizard(false); setEditingEventId(null); setEventName(''); setCriteria([]); setEventType(EventType.JUDGING); };
 
   const handleEnrollParticipant = () => {
     if (!newPartName || !newPartDistrict) return;
@@ -181,16 +158,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     <div className="space-y-8 max-w-7xl mx-auto pb-24">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black font-header tracking-tight">Management Console</h1>
+          <h1 className="text-4xl font-black font-header tracking-tight text-white">Management Console</h1>
           <div className="flex gap-4 mt-4 overflow-x-auto pb-2 scrollbar-hide">
-            {['events', 'judges', 'results', 'overall'].map((t) => (
+            {['events', 'judges', 'results'].map((t) => (
               <button key={t} onClick={() => setActiveTab(t as any)} className={`pb-2 px-1 text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === t ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-500 hover:text-slate-300'}`}>
-                {t === 'overall' ? 'Festival Hub' : t.charAt(0).toUpperCase() + t.slice(1).replace('_', ' ')}
+                {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
         </div>
-        {!showWizard && activeTab === 'events' && (
+        {activeTab === 'events' && (
           <button onClick={() => { resetForm(); setShowWizard(true); }} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20">
             <Plus size={20} /> Create New Event
           </button>
@@ -211,9 +188,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {event.type === EventType.JUDGING ? <Award size={32} /> : <Layers size={32} />}
                 </div>
                 <div>
-                  <h4 className="font-black text-2xl tracking-tight group-hover:text-blue-400 transition-colors">{event.name}</h4>
+                  <h4 className="font-black text-2xl tracking-tight text-white group-hover:text-blue-400 transition-colors">{event.name}</h4>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-widest">{event.type.replace('_', ' ')}</span>
+                    <span className="text-xs text-slate-500 font-bold uppercase tracking-widest">{event.type}</span>
                     <span className="w-1 h-1 rounded-full bg-slate-800"></span>
                     <span className="text-xs text-slate-500 font-bold">{participants.filter(p => p.eventId === event.id).length} Enrolled</span>
                   </div>
@@ -246,7 +223,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <tr><td colSpan={3} className="px-8 py-20 text-center text-slate-600 italic">No judges registered.</td></tr>
               ) : judges.map(judge => (
                 <tr key={judge.id} className="hover:bg-white/5 transition-colors">
-                  <td className="px-8 py-6 font-bold">{judge.name}</td>
+                  <td className="px-8 py-6 font-bold text-white">{judge.name}</td>
                   <td className="px-8 py-6"><span className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest">{events.find(e => e.id === judge.assignedEventId)?.name || 'Unassigned'}</span></td>
                   <td className="px-8 py-6 text-right"><button onClick={() => onRemoveJudge(judge.id)} className="p-2 text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={18} /></button></td>
                 </tr>
@@ -261,35 +238,131 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Result tabs and overall standing views... */}
-      {/* (Rest of existing UI components remain the same as previous versions) */}
+      {/* Event Wizard Modal */}
+      {showWizard && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl overflow-y-auto">
+          <div className="glass-card w-full max-w-3xl p-8 lg:p-12 rounded-[3rem] border border-white/10 shadow-2xl animate-in zoom-in-95 duration-300 my-auto">
+            <div className="flex justify-between items-start mb-10">
+              <div>
+                <h3 className="text-3xl font-black font-header tracking-tight text-white">
+                  {editingEventId ? 'Modify Contest' : 'Configure New Event'}
+                </h3>
+                <p className="text-slate-400 mt-2">Define the rules, criteria, and scoring system.</p>
+              </div>
+              <button onClick={resetForm} className="p-3 bg-white/5 text-slate-500 hover:text-white rounded-2xl transition-all">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Event Name</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Modern Dance Competition"
+                    value={eventName} 
+                    onChange={e => setEventName(e.target.value)} 
+                    className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none focus:border-blue-500 transition-all" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Competition Type</label>
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={() => setEventType(EventType.JUDGING)}
+                      className={`flex-1 py-4 rounded-2xl font-bold border transition-all flex items-center justify-center gap-2 ${eventType === EventType.JUDGING ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-slate-500 hover:text-white'}`}
+                    >
+                      <Award size={18} /> Panel Judging
+                    </button>
+                    <button 
+                      onClick={() => setEventType(EventType.QUIZ_BEE)}
+                      className={`flex-1 py-4 rounded-2xl font-bold border transition-all flex items-center justify-center gap-2 ${eventType === EventType.QUIZ_BEE ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-slate-500 hover:text-white'}`}
+                    >
+                      <Layers size={18} /> Point Based
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-white/5">
+                <WeightingWizard initialCriteria={criteria} onChange={setCriteria} />
+              </div>
+
+              <div className="flex gap-4 pt-6">
+                <button 
+                  onClick={resetForm}
+                  className="flex-1 py-5 rounded-2xl font-black uppercase tracking-widest text-xs text-slate-400 hover:text-white bg-white/5 transition-all"
+                >
+                  Discard Changes
+                </button>
+                <button 
+                  onClick={handleSaveEvent}
+                  className="flex-[2] py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 transition-all shadow-xl shadow-blue-600/20"
+                >
+                  <Save size={20} />
+                  {editingEventId ? 'Apply Modifications' : 'Initialize Event'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enroll Participant Modal */}
+      {showEnrollModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
+          <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10 shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-2xl font-black font-header tracking-tight text-white">Enroll Contestant</h3>
+              <button onClick={() => setShowEnrollModal(null)} className="p-2 text-slate-600 hover:text-white transition-colors"><X size={24} /></button>
+            </div>
+            <div className="space-y-6">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Full Name / Group Name</label>
+                <input type="text" value={newPartName} onChange={e => setNewPartName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Division / School District</label>
+                <select value={newPartDistrict} onChange={e => setNewPartDistrict(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none">
+                  {SDO_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <button onClick={handleEnrollParticipant} className="w-full bg-blue-600 hover:bg-blue-700 p-5 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 text-white">
+                <UserPlus size={20} />
+                Confirm Enrollment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Judge Management Modal */}
       {showJudgeModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
           <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10 shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black font-header tracking-tight">Register Judge</h3><button onClick={() => setShowJudgeModal(false)} className="p-2 text-slate-600 hover:text-white transition-colors"><X size={24} /></button></div>
+            <div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black font-header tracking-tight text-white">Register Judge</h3><button onClick={() => setShowJudgeModal(false)} className="p-2 text-slate-600 hover:text-white transition-colors"><X size={24} /></button></div>
             <div className="space-y-6">
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Full Name</label>
-                <input type="text" value={judgeName} onChange={e => setJudgeName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold outline-none" />
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Full Name</label>
+                <input type="text" value={judgeName} onChange={e => setJudgeName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" />
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Email Address</label>
-                <input type="email" value={judgeEmail} onChange={e => setJudgeEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold outline-none" />
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Email Address</label>
+                <input type="email" value={judgeEmail} onChange={e => setJudgeEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" />
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Temporary Password</label>
-                <input type="password" value={judgePassword} onChange={e => setJudgePassword(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold outline-none" />
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Temporary Password</label>
+                <input type="password" value={judgePassword} onChange={e => setJudgePassword(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none" />
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Assign To Event</label>
-                <select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl font-bold outline-none">
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Assign To Event</label>
+                <select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl font-bold text-white outline-none">
                   <option value="">Select Event</option>
                   {events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </div>
-              <button disabled={isSubmitting} onClick={handleCreateJudge} className="w-full bg-indigo-600 hover:bg-indigo-700 p-5 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2">
+              <button disabled={isSubmitting} onClick={handleCreateJudge} className="w-full bg-indigo-600 hover:bg-indigo-700 p-5 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 text-white">
                 {isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus size={20} />}
                 Confirm Registration
               </button>
