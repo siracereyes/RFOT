@@ -10,14 +10,15 @@ import { Loader2 } from 'lucide-react';
 import { supabase } from './supabase';
 
 const App: React.FC = () => {
-  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [isRegistering, setIsRegistering] = useState(false);
-  const initAttempted = useRef(false);
+  const initRef = useRef(false);
 
   const mapEvent = (db: any): Event => ({
     id: db.id,
@@ -55,6 +56,7 @@ const App: React.FC = () => {
   });
 
   const fetchAllData = useCallback(async () => {
+    setDataLoading(true);
     try {
       const results = await Promise.allSettled([
         supabase.from('events').select('*'),
@@ -74,6 +76,8 @@ const App: React.FC = () => {
       });
     } catch (e) {
       console.error("Data fetch error:", e);
+    } finally {
+      setDataLoading(false);
     }
   }, []);
 
@@ -106,7 +110,7 @@ const App: React.FC = () => {
         
         setCurrentUser(fallbackUser);
         
-        // Background upsert
+        // Background sync to DB
         supabase.from('profiles').upsert([{
           id: authSession.user.id,
           name: fallbackUser.name,
@@ -114,7 +118,7 @@ const App: React.FC = () => {
           email: fallbackUser.email,
           assigned_event_id: fallbackUser.assignedEventId
         }]).then(({ error }) => {
-          if (error) console.error("Profile auto-sync error:", error);
+          if (error) console.error("Auto-profile sync failed:", error);
         });
       }
     } catch (err) {
@@ -122,55 +126,51 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSessionChange = useCallback(async (session: any) => {
-    if (session) {
-      await resolveProfile(session);
-      await fetchAllData();
-    } else {
-      setCurrentUser(null);
-      setUsers([]);
-      setEvents([]);
-    }
-    setLoading(false);
-  }, [fetchAllData]);
-
   useEffect(() => {
-    if (initAttempted.current) return;
-    initAttempted.current = true;
+    if (initRef.current) return;
+    initRef.current = true;
 
-    const initApp = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await handleSessionChange(session);
-      } catch (e) {
-        console.error("Auth init error:", e);
-        setLoading(false);
+    // 1. Set a fail-safe timeout
+    const failSafe = setTimeout(() => {
+      setAuthLoading(false);
+    }, 5000);
+
+    const initialize = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await resolveProfile(session);
+        await fetchAllData();
       }
+      setAuthLoading(false);
+      clearTimeout(failSafe);
     };
 
-    initApp();
+    initialize();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
-        await handleSessionChange(session);
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        await resolveProfile(session);
+        await fetchAllData();
+        setAuthLoading(false);
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setUsers([]);
+        setEvents([]);
+        setAuthLoading(false);
       }
     });
 
     return () => {
       subscription.unsubscribe();
+      clearTimeout(failSafe);
     };
-  }, [handleSessionChange]);
+  }, [fetchAllData]);
 
   const handleLogout = async () => {
-    try {
-      setLoading(true);
-      await supabase.auth.signOut();
-      localStorage.clear();
-      window.location.href = '/'; 
-    } catch (error) {
-      console.error("Logout error:", error);
-      window.location.reload();
-    }
+    setAuthLoading(true);
+    await supabase.auth.signOut();
+    localStorage.clear();
+    window.location.href = '/'; 
   };
 
   const [loginCreds, setLoginCreds] = useState({ email: '', password: '' });
@@ -178,7 +178,7 @@ const App: React.FC = () => {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setAuthLoading(true);
     setAuthError('');
     try {
       if (isRegistering) {
@@ -197,44 +197,35 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       setAuthError(error.message);
-      setLoading(false);
+      setAuthLoading(false);
     }
   };
 
+  // State update handlers
   const addEvent = async (e: Event) => {
     const { data, error } = await supabase.from('events').insert([{
-      name: e.name,
-      type: e.type,
-      criteria: e.criteria,
-      rounds: e.rounds,
-      is_locked: e.isLocked,
-      event_admin_id: currentUser?.id
+      name: e.name, type: e.type, criteria: e.criteria, rounds: e.rounds, is_locked: e.isLocked, event_admin_id: currentUser?.id
     }]).select();
     if (!error && data) setEvents(prev => [...prev, mapEvent(data[0])]);
   };
 
   const updateEvent = async (e: Event) => {
     const { error } = await supabase.from('events').update({
-      name: e.name,
-      is_locked: e.isLocked,
-      criteria: e.criteria
+      name: e.name, is_locked: e.isLocked, criteria: e.criteria
     }).eq('id', e.id);
     if (!error) setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev));
   };
 
   const addParticipant = async (p: Participant) => {
     const { data, error } = await supabase.from('participants').insert([{
-      name: p.name,
-      district: p.district,
-      event_id: p.eventId
+      name: p.name, district: p.district, event_id: p.eventId
     }]).select();
     if (!error && data) setParticipants(prev => [...prev, mapParticipant(data[0])]);
   };
 
   const updateParticipant = async (p: Participant) => {
     const { error } = await supabase.from('participants').update({
-      name: p.name,
-      district: p.district
+      name: p.name, district: p.district
     }).eq('id', p.id);
     if (!error) setParticipants(prev => prev.map(part => part.id === p.id ? p : part));
   };
@@ -246,27 +237,15 @@ const App: React.FC = () => {
 
   const submitScore = async (s: Score) => {
     await supabase.from('scores').upsert({
-      id: s.id,
-      judge_id: s.judgeId,
-      participant_id: s.participantId,
-      event_id: s.eventId,
-      criteria_scores: s.criteriaScores,
-      total_score: s.totalScore,
-      critique: s.critique
+      id: s.id, judge_id: s.judgeId, participant_id: s.participantId, event_id: s.eventId, criteria_scores: s.criteriaScores, total_score: s.totalScore, critique: s.critique
     });
   };
 
   const addJudge = async (u: any) => {
     const { data, error } = await supabase.from('profiles').insert([{
-      id: u.id,
-      name: u.name,
-      role: UserRole.JUDGE,
-      assigned_event_id: u.assigned_event_id,
-      email: u.email
+      id: u.id, name: u.name, role: UserRole.JUDGE, assigned_event_id: u.assigned_event_id, email: u.email
     }]).select();
-    if (!error && data) {
-      setUsers(prev => [...prev, mapUser(data[0])]);
-    }
+    if (!error && data) setUsers(prev => [...prev, mapUser(data[0])]);
   };
 
   const removeJudge = async (id: string) => {
@@ -274,7 +253,7 @@ const App: React.FC = () => {
     if (!error) setUsers(prev => prev.filter(u => u.id !== id));
   };
 
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 gap-4">
         <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
@@ -322,6 +301,11 @@ const App: React.FC = () => {
   return (
     <Router>
       <Layout user={currentUser} onLogout={handleLogout}>
+        {dataLoading && (
+          <div className="fixed top-0 left-0 w-full h-1 bg-blue-600/20 z-[100]">
+            <div className="h-full bg-blue-500 animate-[loading_2s_ease-in-out_infinite] w-1/3 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
+          </div>
+        )}
         <Routes>
           <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
           <Route path="/events" element={<AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
@@ -330,6 +314,12 @@ const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>
+      <style>{`
+        @keyframes loading {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(300%); }
+        }
+      `}</style>
     </Router>
   );
 };
