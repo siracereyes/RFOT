@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Trophy, Medal, Star, LayoutTemplate, Users, Sparkles, Volume2, Loader2, Info } from 'lucide-react';
 import { Event, Participant, Score, EventType } from '../types';
 import { GoogleGenAI, Modality } from '@google/genai';
+import { supabase } from '../supabase';
 
 interface PublicLeaderboardProps {
   events: Event[];
@@ -10,11 +11,41 @@ interface PublicLeaderboardProps {
   scores: Score[];
 }
 
-const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participants, scores }) => {
+const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participants, scores: initialScores }) => {
+  const [scores, setScores] = useState<Score[]>(initialScores);
   const [selectedEventId, setSelectedEventId] = useState<string>(events.length > 0 ? events[0].id : '');
   const [isAnnouncing, setIsAnnouncing] = useState(false);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
+
+  const mapScore = (db: any): Score => ({
+    id: db.id,
+    judgeId: db.judge_id,
+    participantId: db.participant_id,
+    eventId: db.event_id,
+    criteriaScores: db.criteria_scores,
+    totalScore: db.total_score,
+    critique: db.critique
+  });
+
+  useEffect(() => {
+    setScores(initialScores);
+  }, [initialScores]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('public_leaderboard_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setScores(prev => [...prev, mapScore(payload.new)]);
+        } else if (payload.eventType === 'UPDATE') {
+          setScores(prev => prev.map(s => s.id === payload.new.id ? mapScore(payload.new) : s));
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   useEffect(() => {
     if (events.length > 0 && (!selectedEventId || !events.find(e => e.id === selectedEventId))) {
@@ -87,10 +118,14 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-        const bytes = new Uint8Array(atob(base64Audio).split('').map(c => c.charCodeAt(0)));
+        const binaryString = atob(base64Audio);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
         const dataInt16 = new Int16Array(bytes.buffer);
         const buffer = audioContext.createBuffer(1, dataInt16.length, 24000);
-        buffer.getChannelData(0).set(Array.from(dataInt16).map(v => v / 32768.0));
+        const channelData = buffer.getChannelData(0);
+        for (let i = 0; i < dataInt16.length; i++) channelData[i] = dataInt16[i] / 32768.0;
         const source = audioContext.createBufferSource();
         source.buffer = buffer; source.connect(audioContext.destination); source.start();
         source.onended = () => setIsAnnouncing(false);
@@ -102,7 +137,7 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
     <div className="min-h-screen p-6 lg:p-12 space-y-16 max-w-7xl mx-auto pb-32">
       <div className="flex flex-col items-center space-y-8">
         <div className="text-center space-y-4">
-          <h1 className="text-4xl lg:text-7xl font-black font-header tracking-tighter text-white">{currentEvent?.name.toUpperCase()} STANDINGS</h1>
+          <h1 className="text-4xl lg:text-7xl font-black font-header tracking-tighter text-white">{currentEvent?.name.toUpperCase() || 'STANDINGS'}</h1>
           {aiInsight && <p className="text-lg font-medium text-blue-400 italic">"{aiInsight}"</p>}
           <p className="text-[10px] font-black uppercase text-emerald-400">Sum of Ranks System Active (Lowest wins)</p>
         </div>
@@ -127,12 +162,17 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
           <tbody className="divide-y divide-white/5">
             {rankings.map((r, i) => (
               <tr key={r.id} className="hover:bg-white/5 transition-colors group">
-                <td className="px-10 py-8 font-black text-xl">{i + 1}</td>
-                <td className="px-10 py-8 font-black text-lg">{r.name}</td>
+                <td className="px-10 py-8 font-black text-xl text-white">{i + 1}</td>
+                <td className="px-10 py-8 font-black text-lg text-white">{r.name}</td>
                 <td className="px-10 py-8 text-slate-400 font-bold">{r.district}</td>
                 <td className="px-10 py-8 text-right font-black text-3xl text-blue-400">{r.displayScore}</td>
               </tr>
             ))}
+            {rankings.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-10 py-20 text-center text-slate-500 italic">No scores submitted yet for this event.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

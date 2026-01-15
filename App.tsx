@@ -6,114 +6,234 @@ import Layout from './components/Layout';
 import AdminDashboard from './views/AdminDashboard';
 import JudgeDashboard from './views/JudgeDashboard';
 import PublicLeaderboard from './views/PublicLeaderboard';
+import { Loader2 } from 'lucide-react';
+import { supabase } from './supabase';
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('rfot_current_user');
-    return saved ? JSON.parse(saved) : null;
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [scores, setScores] = useState<Score[]>([]);
+
+  // Mappers to bridge CamelCase (Frontend) and SnakeCase (Supabase)
+  const mapEvent = (db: any): Event => ({
+    id: db.id,
+    name: db.name,
+    type: db.type,
+    criteria: db.criteria || [],
+    rounds: db.rounds || [],
+    isLocked: db.is_locked,
+    eventAdminId: db.event_admin_id
   });
-  
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('rfot_users');
-    // Default admin account
-    const defaultAdmin: User = { 
-      id: 'admin_1', 
-      name: 'admin', 
-      email: 'admin@rfot.gov.ph', 
-      role: UserRole.SUPER_ADMIN, 
-      password: 'password123' 
+
+  const mapParticipant = (db: any): Participant => ({
+    id: db.id,
+    name: db.name,
+    district: db.district,
+    eventId: db.event_id
+  });
+
+  const mapScore = (db: any): Score => ({
+    id: db.id,
+    judgeId: db.judge_id,
+    participantId: db.participant_id,
+    eventId: db.event_id,
+    criteriaScores: db.criteria_scores,
+    totalScore: db.total_score,
+    critique: db.critique
+  });
+
+  const mapUser = (db: any): User => ({
+    id: db.id,
+    name: db.name,
+    role: db.role,
+    email: db.email || '',
+    assignedEventId: db.assigned_event_id
+  });
+
+  // 1. Initial Data Load and Auth Listener
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [
+          { data: eventsData },
+          { data: partsData },
+          { data: scoresData },
+          { data: profilesData }
+        ] = await Promise.all([
+          supabase.from('events').select('*'),
+          supabase.from('participants').select('*'),
+          supabase.from('scores').select('*'),
+          supabase.from('profiles').select('*')
+        ]);
+
+        if (eventsData) setEvents(eventsData.map(mapEvent));
+        if (partsData) setParticipants(partsData.map(mapParticipant));
+        if (scoresData) setScores(scoresData.map(mapScore));
+        if (profilesData) setUsers(profilesData.map(mapUser));
+      } catch (e) {
+        console.error("Data fetch error", e);
+      }
     };
-    return saved ? JSON.parse(saved) : [defaultAdmin];
-  });
 
-  const [events, setEvents] = useState<Event[]>(() => {
-    const saved = localStorage.getItem('rfot_events');
-    return saved ? JSON.parse(saved) : [];
-  });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile) {
+          setCurrentUser(mapUser(profile));
+        } else {
+          const fallbackUser: User = {
+            id: session.user.id,
+            name: session.user.email?.split('@')[0] || 'User',
+            role: UserRole.SUPER_ADMIN,
+            email: session.user.email || ''
+          };
+          setCurrentUser(fallbackUser);
+        }
+      } else {
+        setCurrentUser(null);
+      }
+      setLoading(false);
+    });
 
-  const [participants, setParticipants] = useState<Participant[]>(() => {
-    const saved = localStorage.getItem('rfot_participants');
-    return saved ? JSON.parse(saved) : [];
-  });
+    fetchData();
 
-  const [scores, setScores] = useState<Score[]>(() => {
-    const saved = localStorage.getItem('rfot_scores');
-    return saved ? JSON.parse(saved) : [];
-  });
+    // 2. Real-time Subscription with mapping
+    const scoresSubscription = supabase
+      .channel('realtime_scores')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setScores(prev => [...prev, mapScore(payload.new)]);
+        } else if (payload.eventType === 'UPDATE') {
+          setScores(prev => prev.map(s => s.id === payload.new.id ? mapScore(payload.new) : s));
+        } else if (payload.eventType === 'DELETE') {
+          setScores(prev => prev.filter(s => s.id !== payload.old.id));
+        }
+      })
+      .subscribe();
 
-  useEffect(() => {
-    localStorage.setItem('rfot_users', JSON.stringify(users));
-  }, [users]);
+    return () => {
+      subscription.unsubscribe();
+      supabase.removeChannel(scoresSubscription);
+    };
+  }, []);
 
-  useEffect(() => {
-    localStorage.setItem('rfot_events', JSON.stringify(events));
-  }, [events]);
-
-  useEffect(() => {
-    localStorage.setItem('rfot_participants', JSON.stringify(participants));
-  }, [participants]);
-
-  useEffect(() => {
-    localStorage.setItem('rfot_scores', JSON.stringify(scores));
-  }, [scores]);
-
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('rfot_current_user', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('rfot_current_user');
-    }
-  }, [currentUser]);
-
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setCurrentUser(null);
   };
 
-  const [loginCreds, setLoginCreds] = useState({ username: '', password: '' });
+  const [loginCreds, setLoginCreds] = useState({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.name === loginCreds.username && u.password === loginCreds.password);
-    if (user) {
-      setCurrentUser(user);
-      setLoginError('');
-    } else {
-      setLoginError('Invalid username or password.');
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginCreds.email,
+      password: loginCreds.password,
+    });
+    
+    if (error) {
+      setLoginError(error.message);
+      setLoading(false);
     }
   };
 
-  const addEvent = (newEvent: Event) => {
-    setEvents(prev => [...prev, newEvent]);
+  // Database Mutators with Snake Case mapping
+  const addEvent = async (e: Event) => {
+    const { data, error } = await supabase.from('events').insert([{
+      name: e.name,
+      type: e.type,
+      criteria: e.criteria,
+      rounds: e.rounds,
+      is_locked: e.isLocked,
+      event_admin_id: currentUser?.id
+    }]).select();
+    if (error) console.error(error);
+    else if (data) setEvents(prev => [...prev, mapEvent(data[0])]);
   };
 
-  const updateEvent = (updatedEvent: Event) => {
-    setEvents(prev => prev.map(e => e.id === updatedEvent.id ? updatedEvent : e));
+  const updateEvent = async (e: Event) => {
+    const { error } = await supabase.from('events').update({
+      name: e.name,
+      is_locked: e.isLocked,
+      criteria: e.criteria
+    }).eq('id', e.id);
+    if (error) console.error(error);
+    else setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev));
   };
 
-  const addParticipant = (newParticipant: Participant) => {
-    setParticipants(prev => [...prev, newParticipant]);
+  const addParticipant = async (p: Participant) => {
+    const { data, error } = await supabase.from('participants').insert([{
+      name: p.name,
+      district: p.district,
+      event_id: p.eventId
+    }]).select();
+    if (error) console.error(error);
+    else if (data) setParticipants(prev => [...prev, mapParticipant(data[0])]);
   };
 
-  const submitScore = (score: Score) => {
-    setScores(prev => {
-      const existingIndex = prev.findIndex(s => s.participantId === score.participantId && s.judgeId === score.judgeId);
-      if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex] = score;
-        return updated;
-      }
-      return [...prev, score];
+  const updateParticipant = async (p: Participant) => {
+    const { error } = await supabase.from('participants').update({
+      name: p.name,
+      district: p.district
+    }).eq('id', p.id);
+    if (error) console.error(error);
+    else setParticipants(prev => prev.map(part => part.id === p.id ? p : part));
+  };
+
+  const deleteParticipant = async (id: string) => {
+    const { error } = await supabase.from('participants').delete().eq('id', id);
+    if (error) console.error(error);
+    else setParticipants(prev => prev.filter(p => p.id !== id));
+  };
+
+  const submitScore = async (s: Score) => {
+    const { error } = await supabase.from('scores').upsert({
+      id: s.id,
+      judge_id: s.judgeId,
+      participant_id: s.participantId,
+      event_id: s.eventId,
+      criteria_scores: s.criteriaScores,
+      total_score: s.totalScore,
+      critique: s.critique
     });
+    if (error) console.error(error);
   };
 
-  const addJudge = (judge: User) => {
-    setUsers(prev => [...prev, judge]);
+  const addJudge = async (u: any) => {
+    const { data, error } = await supabase.from('profiles').insert([{
+      id: u.id,
+      name: u.name,
+      role: u.role,
+      assigned_event_id: u.assigned_event_id
+    }]).select();
+    if (error) console.error(error);
+    else if (data) setUsers(prev => [...prev, mapUser(data[0])]);
   };
 
-  const removeJudge = (id: string) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
+  const removeJudge = async (id: string) => {
+    const { error } = await supabase.from('profiles').delete().eq('id', id);
+    if (error) console.error(error);
+    else setUsers(prev => prev.filter(u => u.id !== id));
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 gap-4">
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs animate-pulse">Establishing Secure Session...</p>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (
@@ -121,19 +241,19 @@ const App: React.FC = () => {
         <div className="glass-card p-10 rounded-[2.5rem] w-full max-w-md border border-white/10 shadow-2xl space-y-8 animate-in zoom-in-95 duration-500">
           <div className="text-center relative">
             <div className="absolute -top-4 -left-4 w-12 h-12 bg-blue-500/20 rounded-full blur-xl animate-pulse"></div>
-            <h1 className="text-4xl font-black font-header tracking-tight">RFOT <span className="text-blue-400">2024</span></h1>
+            <h1 className="text-4xl font-black font-header tracking-tight text-white">RFOT <span className="text-blue-400">2024</span></h1>
             <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring System</p>
           </div>
           
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Username</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</label>
               <input 
-                type="text" 
+                type="email" 
                 required
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold"
-                value={loginCreds.username}
-                onChange={e => setLoginCreds({...loginCreds, username: e.target.value})}
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white"
+                value={loginCreds.email}
+                onChange={e => setLoginCreds({...loginCreds, email: e.target.value})}
               />
             </div>
             <div>
@@ -141,7 +261,7 @@ const App: React.FC = () => {
               <input 
                 type="password" 
                 required
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white"
                 value={loginCreds.password}
                 onChange={e => setLoginCreds({...loginCreds, password: e.target.value})}
               />
@@ -158,8 +278,8 @@ const App: React.FC = () => {
             </button>
           </form>
           
-          <div className="pt-6 border-t border-white/10 text-center">
-            <p className="text-[10px] text-slate-500 uppercase tracking-[0.3em] font-bold">Official Management Portal</p>
+          <div className="pt-6 border-t border-white/10 text-center text-slate-500 text-[10px] uppercase font-bold tracking-widest">
+            Regional Management Portal
           </div>
         </div>
       </div>
@@ -170,8 +290,8 @@ const App: React.FC = () => {
     <Router>
       <Layout user={currentUser} onLogout={handleLogout}>
         <Routes>
-          <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
-          <Route path="/events" element={<AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
+          <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
+          <Route path="/events" element={<AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
           <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={submitScore} />} />
           <Route path="/public" element={<PublicLeaderboard events={events} participants={participants} scores={scores} />} />
           <Route path="*" element={<Navigate to="/" />} />

@@ -14,7 +14,8 @@
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.0",
     "lucide-react": "^0.475.0",
-    "@google/genai": "latest"
+    "@google/genai": "latest",
+    "@supabase/supabase-js": "^2.48.1"
   },
   "devDependencies": {
     "vite": "^6.0.7",
