@@ -44,90 +44,95 @@ const WeightingWizard: React.FC<WeightingWizardProps> = ({ initialCriteria = [],
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between mb-2">
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold font-header">Scoring Criteria</h3>
-          <p className="text-sm text-slate-400">Define weighted metrics and descriptions</p>
+          <h3 className="text-xl font-black font-header text-slate-900">Scoring Criteria</h3>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Weight distribution and metrics</p>
         </div>
-        <div className={`px-4 py-2 rounded-full font-bold flex items-center gap-2 ${
-          isValid ? 'bg-emerald-500/20 text-emerald-400' : 
-          isExceeded ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'
+        <div className={`px-5 py-2.5 rounded-full font-black text-xs flex items-center gap-2 border ${
+          isValid ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+          isExceeded ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-600 border-blue-100'
         }`}>
-          {isValid ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-          {totalWeight}%
+          {isValid ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+          {totalWeight}% Distribution
         </div>
       </div>
 
-      <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden mb-8">
+      <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
         <div 
-          className={`h-full transition-all duration-500 ${isValid ? 'bg-emerald-500' : isExceeded ? 'bg-red-500' : 'bg-blue-500'}`}
+          className={`h-full transition-all duration-700 ${isValid ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : isExceeded ? 'bg-red-500' : 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.3)]'}`}
           style={{ width: `${Math.min(totalWeight, 100)}%` }}
         />
       </div>
 
-      <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="space-y-6 max-h-[500px] overflow-y-auto pr-3 no-scrollbar">
         {criteria.map((c, index) => (
-          <div key={c.id} className="flex flex-col gap-3 p-4 glass rounded-xl group relative">
-            <div className="flex gap-4 items-start">
+          <div key={c.id} className="p-6 bg-slate-50 border border-slate-200 rounded-[2rem] space-y-5 transition-all group hover:bg-white hover:shadow-sm">
+            <div className="flex gap-6 items-start">
               <div className="flex-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 block">Criterion Name</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Criterion Identity</label>
                 <input
                   type="text"
                   value={c.name}
                   onChange={(e) => handleUpdateCriterion(c.id, 'name', e.target.value)}
-                  placeholder="e.g., Creativity"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-blue-500 outline-none transition-all text-sm"
+                  placeholder="e.g., Performance Technique"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3.5 focus:border-blue-500 outline-none transition-all text-sm font-bold text-slate-900"
                 />
               </div>
-              <div className="w-24">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 block">Weight %</label>
+              <div className="w-28">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Weight (%)</label>
                 <input
                   type="number"
                   value={c.weight}
                   onChange={(e) => handleUpdateCriterion(c.id, 'weight', parseInt(e.target.value) || 0)}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-blue-500 outline-none transition-all text-sm"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3.5 focus:border-blue-500 outline-none transition-all text-sm font-black text-center text-blue-600"
                 />
               </div>
               <button 
                 onClick={() => handleDeleteCriterion(c.id)}
-                className="mt-6 p-2 text-slate-500 hover:text-red-400 transition-colors"
+                className="mt-8 p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
               >
-                <Trash2 size={18} />
+                <Trash2 size={20} />
               </button>
             </div>
             <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 block flex items-center gap-1">
-                <MessageSquare size={10} /> Description / Guidelines for Judges
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block flex items-center gap-1.5">
+                <MessageSquare size={12} className="text-blue-400" /> Evaluation Guidelines
               </label>
               <textarea
                 value={c.description || ''}
                 onChange={(e) => handleUpdateCriterion(c.id, 'description', e.target.value)}
-                placeholder="Explain what the judges should look for in this criterion..."
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-blue-500 outline-none transition-all text-xs h-16 resize-none"
+                placeholder="Clarify specific focus points for evaluators..."
+                className="w-full bg-white border border-slate-200 rounded-xl px-5 py-4 focus:border-blue-500 outline-none transition-all text-xs font-medium text-slate-600 h-24 resize-none leading-relaxed"
               />
             </div>
           </div>
         ))}
+        {criteria.length === 0 && (
+           <div className="py-12 text-center border-2 border-dashed border-slate-100 rounded-[2rem]">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">No criteria defined for this contest</p>
+           </div>
+        )}
       </div>
 
       <button
         onClick={handleAddCriterion}
         disabled={totalWeight >= 100}
-        className={`w-full py-4 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 transition-all ${
+        className={`w-full py-5 border-2 border-dashed rounded-[2rem] flex items-center justify-center gap-3 transition-all font-black uppercase tracking-widest text-xs ${
           totalWeight >= 100 
-            ? 'border-slate-800 text-slate-700 cursor-not-allowed' 
-            : 'border-white/10 text-slate-400 hover:border-blue-500/50 hover:text-blue-400 hover:bg-blue-500/5'
+            ? 'border-slate-100 text-slate-200 cursor-not-allowed' 
+            : 'border-slate-200 text-slate-400 hover:border-blue-500/50 hover:text-blue-600 hover:bg-blue-50'
         }`}
       >
         <Plus size={20} />
-        Add Criterion
+        Append New Criterion
       </button>
 
       {isExceeded && (
-        <div className="flex items-center gap-2 text-red-400 bg-red-400/10 p-3 rounded-lg border border-red-400/20">
-          <AlertCircle size={18} />
-          <span className="text-sm font-medium">Warning: Total weight exceeds 100%!</span>
+        <div className="flex items-center gap-3 text-red-600 bg-red-50 p-5 rounded-2xl border border-red-100 animate-pulse">
+          <AlertCircle size={20} />
+          <span className="text-xs font-black uppercase tracking-wide">Validation Error: Aggregated weight exceeds 100%!</span>
         </div>
       )}
     </div>

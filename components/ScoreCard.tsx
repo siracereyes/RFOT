@@ -104,7 +104,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
   };
 
   return (
-    <div className={`glass-card rounded-[2.5rem] overflow-hidden transition-all relative ${isLocked ? 'border-red-200 bg-red-50/10' : 'border-slate-200'}`}>
+    <div className={`bg-white rounded-[2.5rem] overflow-hidden transition-all relative border ${isLocked ? 'border-red-200 bg-red-50/10' : 'border-slate-200 shadow-xl'}`}>
       {/* Header Panel */}
       <div className="p-6 md:p-10 bg-slate-50/50 border-b border-slate-200">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
@@ -183,15 +183,15 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                         }`}
                       >
                         <div className="min-w-0">
-                          <p className={`text-xs font-black truncate uppercase tracking-tight ${isCorrect ? 'text-white' : isPartial ? 'text-amber-700' : 'text-slate-500'}`}>
+                          <p className={`text-xs font-black truncate uppercase tracking-tight ${isCorrect ? 'text-emerald-700' : isPartial ? 'text-amber-700' : 'text-slate-600'}`}>
                             {r.name}
                           </p>
-                          <p className={`text-[8px] font-bold uppercase tracking-widest mt-1 ${isCorrect ? 'text-emerald-100' : 'text-slate-400'}`}>Value: {r.points}pt</p>
+                          <p className={`text-[8px] font-bold uppercase tracking-widest mt-1 ${isCorrect ? 'text-emerald-600' : 'text-slate-400'}`}>Value: {r.points}pt</p>
                         </div>
                         
                         <div className="flex items-center gap-2">
                           <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                            isCorrect ? 'bg-white text-emerald-600 shadow-sm' : 'bg-white border border-slate-200 text-slate-300'
+                            isCorrect ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'bg-white border border-slate-200 text-slate-300'
                           }`}>
                             {isCorrect ? <Check size={20} /> : <X size={20} />}
                           </div>
@@ -214,7 +214,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                 {criteria.map((c) => (
                   <div key={c.id} className="space-y-2 group">
                     <div className="flex justify-between items-end gap-2">
-                      <label className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5 truncate">
+                      <label className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5 truncate">
                         {c.name}
                         {c.description && <Info size={12} className="text-blue-400 shrink-0" title={c.description} />}
                       </label>
@@ -228,7 +228,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                         onChange={(e) => handleScoreChange(c.id, e.target.value, c.weight)}
                         placeholder="0.0"
                         className={`w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-2xl font-black focus:border-blue-500 focus:bg-white outline-none transition-all placeholder:text-slate-300 ${
-                          isLocked ? 'text-slate-400 cursor-not-allowed border-slate-100' : 'text-slate-900'
+                          isLocked ? 'text-slate-400 cursor-not-allowed border-slate-100' : 'text-slate-900 shadow-inner'
                         }`}
                       />
                     </div>
@@ -238,7 +238,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
             </div>
 
             <div className="space-y-10">
-              <div className={`p-6 md:p-8 border rounded-[2rem] space-y-5 ${isLocked ? 'bg-slate-50 border-slate-100' : 'bg-red-50 border-red-100'}`}>
+              <div className={`p-6 md:p-8 border rounded-[2rem] space-y-5 ${isLocked ? 'bg-slate-50 border-slate-100' : 'bg-red-50 border-red-100 shadow-sm'}`}>
                 <div className="flex items-center justify-between">
                   <label className={`text-[10px] md:text-[11px] font-black uppercase tracking-widest flex items-center gap-2 ${isLocked ? 'text-slate-400' : 'text-red-600'}`}>
                     <AlertTriangle size={16} /> Technical Deductions
@@ -250,12 +250,12 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                   value={deductions ?? 0}
                   onChange={(e) => setDeductions(Math.max(0, parseFloat(e.target.value) || 0))}
                   placeholder="0"
-                  className={`w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-3xl font-black outline-none transition-all ${isLocked ? 'text-slate-300 border-slate-100' : 'text-red-600 focus:border-red-400'}`}
+                  className={`w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-3xl font-black outline-none transition-all ${isLocked ? 'text-slate-300 border-slate-100' : 'text-red-600 focus:border-red-400 shadow-inner'}`}
                 />
               </div>
 
               <div className="space-y-4">
-                <label className="text-[10px] md:text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <label className="text-[10px] md:text-[11px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
                   <MessageSquareQuote size={16} className="text-blue-600" /> Qualitative Feedback
                 </label>
                 <textarea
@@ -263,7 +263,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                   onChange={(e) => setCritique(e.target.value)}
                   disabled={isLocked || isSaving}
                   placeholder="Brief commentary..."
-                  className={`w-full h-32 bg-slate-50 border border-slate-200 rounded-[2rem] p-6 text-sm focus:border-blue-300 outline-none resize-none transition-all placeholder:text-slate-300 leading-relaxed ${isLocked ? 'text-slate-300' : 'text-slate-700'}`}
+                  className={`w-full h-32 bg-slate-50 border border-slate-200 rounded-[2rem] p-6 text-sm focus:border-blue-300 outline-none resize-none transition-all placeholder:text-slate-300 leading-relaxed shadow-inner ${isLocked ? 'text-slate-300' : 'text-slate-700'}`}
                 />
               </div>
             </div>
