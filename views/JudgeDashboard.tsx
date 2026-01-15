@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import ScoreCard from '../components/ScoreCard';
-import { Search, CheckCircle, Award, User, Clock, AlertCircle, Users, ArrowLeft } from 'lucide-react';
+import { Search, CheckCircle, Award, User, Clock, AlertCircle, Users, ArrowLeft, Filter } from 'lucide-react';
 import { Event, Participant, Score, User as UserType } from '../types';
 
 interface JudgeDashboardProps {
@@ -90,19 +90,19 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
   if (assignedEvents.length === 0) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-6 text-center px-6">
-        <div className="w-20 h-20 md:w-24 md:h-24 rounded-[2rem] bg-slate-900 border border-white/5 flex items-center justify-center text-slate-700 animate-float shadow-2xl">
+        <div className="w-20 h-20 rounded-3xl bg-slate-900 border border-white/5 flex items-center justify-center text-slate-700 animate-float shadow-2xl">
           <Award size={40} />
         </div>
-        <h2 className="text-2xl md:text-3xl font-black font-header tracking-tight">No Events Assigned</h2>
-        <p className="text-slate-500 max-w-sm mx-auto text-sm">Please coordinate with your event administrator for competition category assignments.</p>
+        <h2 className="text-2xl font-black font-header tracking-tight">Access Restricted</h2>
+        <p className="text-slate-500 max-w-sm mx-auto text-sm">You currently have no assigned events. Contact your regional coordinator to be added to an evaluation panel.</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-6 md:space-y-8">
-      {/* Header Stat Bar */}
-      <div className="glass-card rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 border border-white/10 shadow-2xl relative overflow-hidden">
+    <div className="max-w-[1600px] mx-auto space-y-6">
+      {/* Dynamic Header Stat Bar */}
+      <div className="glass-card rounded-3xl p-5 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 border border-white/10 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-white/5">
           <div 
             className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-all duration-1000 ease-out"
@@ -110,52 +110,50 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
           />
         </div>
         
-        <div className="flex items-center gap-5 md:gap-6 text-center md:text-left">
+        <div className="flex items-center gap-4 md:gap-6 text-center md:text-left w-full md:w-auto">
           <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
             <Award size={24} className="md:size-[32px]" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-lg md:text-2xl font-black font-header tracking-tight text-white truncate">{currentEvent?.name}</h1>
-            <div className="flex items-center justify-center md:justify-start gap-2 md:gap-3 mt-1">
-              <span className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase tracking-widest">{currentEvent?.type === 'QUIZ_BEE' ? 'Quiz Bee' : 'Judging'}</span>
+            <div className="flex items-center justify-center md:justify-start gap-3 mt-1">
+              <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{currentEvent?.type}</span>
               <span className="w-1 h-1 rounded-full bg-slate-700"></span>
-              <span className="text-[9px] md:text-[10px] text-blue-400 font-bold uppercase tracking-widest">{scoredCount} / {totalCount} Evaluated</span>
+              <span className="text-[10px] text-blue-400 font-black uppercase tracking-widest">{scoredCount} / {totalCount} Ballots</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-6 md:gap-8">
+        <div className="flex items-center gap-8 w-full md:w-auto justify-center md:justify-end">
           <div className="text-center md:text-right">
             <p className="text-[9px] font-black uppercase text-slate-600 tracking-widest mb-1">Status</p>
-            <div className="flex items-center justify-center md:justify-end gap-2">
-               {currentEvent?.isLocked ? (
-                 <span className="px-3 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-[9px] font-black uppercase tracking-widest">Locked</span>
-               ) : (
-                 <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[9px] font-black uppercase tracking-widest">Active</span>
-               )}
-            </div>
+            {currentEvent?.isLocked ? (
+              <span className="px-3 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"><AlertCircle size={10}/> Finalized</span>
+            ) : (
+              <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"><Clock size={10}/> In Progress</span>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 md:gap-8 items-start relative">
-        {/* Left: Master List (Hidden on mobile if detailing) */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Responsive Side Panel */}
         <div className={`
           w-full lg:w-80 xl:w-96 shrink-0 space-y-4 lg:sticky lg:top-24 
           ${!showMobileList ? 'hidden lg:block' : 'block'}
         `}>
           <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
             <input 
               type="text" 
-              placeholder="Search contestants..."
+              placeholder="Search entry..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-900 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-blue-500/50 transition-all font-bold text-sm text-white shadow-xl"
+              className="w-full bg-slate-900/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-blue-500/50 transition-all font-bold text-sm text-white shadow-xl"
             />
           </div>
 
-          <div className="space-y-3 max-h-[60vh] lg:max-h-[calc(100vh-16rem)] overflow-y-auto pr-1 custom-scrollbar">
+          <div className="space-y-2 max-h-[60vh] lg:max-h-[calc(100vh-16rem)] overflow-y-auto pr-1 no-scrollbar">
             {filteredParticipants.length > 0 ? filteredParticipants.map(participant => {
               const existingScore = getParticipantScore(participant.id);
               const isActive = selectedParticipantId === participant.id;
@@ -164,7 +162,7 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
                 <button
                   key={participant.id}
                   onClick={() => handleSelectParticipant(participant.id)}
-                  className={`w-full text-left p-4 md:p-5 rounded-2xl border transition-all relative group overflow-hidden ${
+                  className={`w-full text-left p-4 rounded-2xl border transition-all relative group ${
                     isActive 
                       ? 'bg-blue-600/10 border-blue-500/30 ring-1 ring-blue-500/20 shadow-lg' 
                       : 'bg-white/[0.02] border-white/5 hover:bg-white/5 hover:border-white/10'
@@ -172,7 +170,7 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-4 min-w-0">
-                      <div className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center font-black text-sm transition-all ${
+                      <div className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center font-black text-xs transition-all ${
                         isActive ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800 text-slate-500'
                       }`}>
                         {participant.name.charAt(0)}
@@ -181,43 +179,40 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
                         <p className={`font-bold text-sm truncate ${isActive ? 'text-white' : 'text-slate-300'}`}>
                           {participant.name}
                         </p>
-                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest truncate">
+                        <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest truncate">
                           {participant.district}
                         </p>
                       </div>
                     </div>
                     {existingScore ? (
-                      <div className="shrink-0 flex flex-col items-end">
-                        <CheckCircle size={16} className="text-emerald-500" />
-                        <span className="text-[8px] font-black text-emerald-500/60 mt-0.5">{existingScore.totalScore}</span>
-                      </div>
+                      <CheckCircle size={16} className="text-emerald-500 shrink-0" />
                     ) : (
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-700 animate-pulse shrink-0"></div>
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-700 shrink-0"></div>
                     )}
                   </div>
                 </button>
               );
             }) : (
-              <div className="p-10 text-center glass rounded-3xl border border-dashed border-white/10 opacity-60">
-                <Users size={32} className="mx-auto mb-3 text-slate-700" />
-                <p className="text-[10px] text-slate-600 font-black uppercase tracking-widest">No Contestants Found</p>
+              <div className="p-10 text-center glass rounded-3xl border border-dashed border-white/10 opacity-30">
+                <Users size={24} className="mx-auto mb-2 text-slate-700" />
+                <p className="text-[9px] text-slate-600 font-black uppercase tracking-widest">No entries match</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right: Detailed Detail (Visible on mobile if detailing) */}
+        {/* Scoring View */}
         <div className={`
-          flex-1 w-full min-h-[500px] animate-in fade-in zoom-in-95 duration-500
+          flex-1 w-full animate-in fade-in zoom-in-95 duration-500
           ${showMobileList ? 'hidden lg:block' : 'block'}
         `}>
           {selectedParticipant && currentEvent ? (
             <div className="space-y-6">
               <button 
                 onClick={() => setShowMobileList(true)}
-                className="lg:hidden flex items-center gap-2 mb-4 px-4 py-2 bg-white/5 rounded-xl text-blue-400 font-bold text-xs hover:bg-white/10 transition-all border border-white/5"
+                className="lg:hidden flex items-center gap-2 mb-4 px-4 py-3 bg-white/5 rounded-2xl text-blue-400 font-black text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all border border-white/5 active:scale-95"
               >
-                <ArrowLeft size={16} /> Back to List
+                <ArrowLeft size={16} /> Return to list
               </button>
 
               <ScoreCard 
@@ -234,9 +229,9 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
               />
             </div>
           ) : (
-            <div className="h-full min-h-[400px] flex flex-col items-center justify-center glass rounded-[3rem] border border-white/5 border-dashed p-10 text-center opacity-30">
-               <User size={48} className="text-slate-700 mb-4" />
-               <p className="text-xs font-black uppercase tracking-widest text-slate-600">Select an entry from the list</p>
+            <div className="h-full min-h-[400px] flex flex-col items-center justify-center glass rounded-[3rem] border border-white/5 border-dashed p-12 text-center opacity-30">
+               <Users size={48} className="text-slate-700 mb-4" />
+               <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-600">Select a contestant to begin scoring</p>
             </div>
           )}
         </div>

@@ -44,8 +44,8 @@ const App: React.FC = () => {
     participantId: db.participant_id,
     eventId: db.event_id,
     criteriaScores: db.criteria_scores || {},
-    deductions: db.deductions || 0,
-    totalScore: db.total_score || 0,
+    deductions: Number(db.deductions) || 0,
+    totalScore: Number(db.total_score) || 0,
     critique: db.critique
   });
 
@@ -266,16 +266,21 @@ const App: React.FC = () => {
               // Safety: Check if event is locked before saving
               const event = events.find(e => e.id === s.eventId);
               if (event?.isLocked) {
-                throw new Error("This category is already locked and cannot be edited.");
+                console.error("Attempted to edit a locked event.");
+                throw new Error("This category is already finalized and locked.");
               }
 
               // Important: Look for existing score to ensure we UPDATE instead of just creating duplicates
-              const { data: existing } = await supabase
+              const { data: existing, error: findError } = await supabase
                 .from('scores')
                 .select('id')
                 .eq('judge_id', s.judgeId)
                 .eq('participant_id', s.participantId)
                 .maybeSingle();
+
+              if (findError) {
+                console.error("Search error:", findError);
+              }
 
               const payload: any = { 
                 judge_id: s.judgeId, 
@@ -290,8 +295,13 @@ const App: React.FC = () => {
               // If record exists, Supabase needs the ID to perform an UPDATE
               if (existing?.id) payload.id = existing.id;
 
+              console.log("Upserting payload:", payload);
               const { data, error } = await supabase.from('scores').upsert(payload).select();
-              if (error) throw error;
+              
+              if (error) {
+                console.error("Upsert error details:", error);
+                throw error;
+              }
               
               const savedScore = mapScore(data[0]);
               setScores(prev => [...prev.filter(score => score.id !== savedScore.id), savedScore]);

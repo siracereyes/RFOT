@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Trophy, Medal, Star, Volume2, ArrowUpRight, Users, ChevronRight } from 'lucide-react';
+import { Trophy, Medal, Star, Volume2, ArrowUpRight, Users, ChevronRight, BarChart3 } from 'lucide-react';
 import { Event, Participant, Score } from '../types';
 import { supabase } from '../supabase';
 
@@ -28,8 +28,8 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
               participantId: payload.new.participant_id,
               eventId: payload.new.event_id,
               criteriaScores: payload.new.criteria_scores,
-              deductions: payload.new.deductions,
-              totalScore: payload.new.total_score,
+              deductions: Number(payload.new.deductions) || 0,
+              totalScore: Number(payload.new.total_score) || 0,
               critique: payload.new.critique
             };
             return [...prev.filter(s => s.id !== mapped.id), mapped];
@@ -80,93 +80,114 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
   }, [selectedEventId, participants, scores, currentEvent]);
 
   return (
-    <div className="min-h-[80vh] py-6 md:py-12 space-y-12 md:space-y-20 max-w-7xl mx-auto px-4 sm:px-6">
+    <div className="min-h-screen py-4 md:py-12 space-y-8 md:space-y-16 max-w-7xl mx-auto px-4 sm:px-6">
       <div className="flex flex-col items-center text-center space-y-6">
-        <div className="space-y-3">
-          <p className="text-[10px] md:text-[12px] font-black uppercase tracking-[0.4em] text-blue-500">Official RFOT Live Standings</p>
-          <h1 className="text-3xl sm:text-5xl lg:text-7xl font-black font-header tracking-tighter text-white break-words max-w-4xl px-4">
-            {currentEvent?.name.toUpperCase() || 'SELECT EVENT'}
+        <div className="space-y-2">
+          <p className="text-[10px] md:text-xs font-black uppercase tracking-[0.4em] text-blue-500">Live Result Standings</p>
+          <h1 className="text-3xl sm:text-5xl lg:text-7xl font-black font-header tracking-tighter text-white break-words max-w-4xl">
+            {currentEvent?.name.toUpperCase() || 'SELECT CONTEST'}
           </h1>
         </div>
         
-        <div className="flex items-center gap-2 md:gap-4 bg-white/5 p-2 rounded-2xl md:rounded-[2rem] border border-white/10 shadow-2xl">
+        <div className="flex flex-col sm:flex-row items-center gap-3 bg-white/5 p-2 rounded-2xl md:rounded-[2.5rem] border border-white/10 shadow-2xl w-full sm:w-auto">
           <select 
             value={selectedEventId} 
             onChange={e => setSelectedEventId(e.target.value)} 
-            className="bg-transparent px-4 sm:px-6 py-3 rounded-xl border-none text-blue-400 font-black text-xs md:text-sm outline-none focus:ring-0"
+            className="bg-transparent px-6 py-3 rounded-xl border-none text-blue-400 font-black text-sm md:text-base outline-none focus:ring-0 w-full sm:w-auto appearance-none cursor-pointer"
           >
             {events.map(e => <option key={e.id} value={e.id} className="bg-slate-900">{e.name}</option>)}
           </select>
-          <div className="w-px h-8 bg-white/10"></div>
-          <button className="p-3 text-blue-400 hover:text-white transition-all"><Volume2 size={20}/></button>
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-2 md:gap-3 px-4">
-           <span className="px-3 md:px-4 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] md:text-[10px] font-black uppercase tracking-widest rounded-full">Deductions Synced</span>
-           <span className="px-3 md:px-4 py-1.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[8px] md:text-[10px] font-black uppercase tracking-widest rounded-full">Tie-Breaker: Weighted Category</span>
+          <div className="hidden sm:block w-px h-8 bg-white/10"></div>
+          <div className="flex items-center gap-3 px-4">
+             <Volume2 size={18} className="text-slate-500" />
+             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest hidden md:block">Real-time sync enabled</span>
+          </div>
         </div>
       </div>
 
-      <div className="glass-card rounded-[2rem] md:rounded-[3.5rem] overflow-hidden border border-white/10 shadow-3xl">
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left min-w-[700px]">
-            <thead className="bg-white/5 border-b border-white/10">
-              <tr>
-                <th className="px-8 md:px-12 py-6 md:py-8 text-[10px] font-black uppercase tracking-widest text-slate-500">Official Rank</th>
-                <th className="px-8 md:px-12 py-6 md:py-8 text-[10px] font-black uppercase tracking-widest text-slate-500">Contestant Entry</th>
-                <th className="px-8 md:px-12 py-6 md:py-8 text-[10px] font-black uppercase tracking-widest text-slate-500">SDO District</th>
-                <th className="px-8 md:px-12 py-6 md:py-8 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Weighted Avg</th>
+      {/* Desktop View Table */}
+      <div className="hidden lg:block glass-card rounded-[3.5rem] overflow-hidden border border-white/10 shadow-3xl">
+        <table className="w-full text-left">
+          <thead className="bg-white/5 border-b border-white/10">
+            <tr>
+              <th className="px-12 py-8 text-[10px] font-black uppercase tracking-widest text-slate-500">Official Rank</th>
+              <th className="px-12 py-8 text-[10px] font-black uppercase tracking-widest text-slate-500">Contestant Entry</th>
+              <th className="px-12 py-8 text-[10px] font-black uppercase tracking-widest text-slate-500">SDO District</th>
+              <th className="px-12 py-8 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Weighted Avg</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {rankings.map((r, i) => (
+              <tr key={r.id} className="hover:bg-white/[0.02] transition-all group">
+                <td className="px-12 py-8">
+                   <div className="flex items-center gap-6">
+                      <span className={`text-3xl font-black tabular-nums ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-orange-400' : 'text-slate-700'}`}>
+                        {i + 1}
+                      </span>
+                      {i < 3 && <Medal size={28} className={i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-orange-400' : ''} />}
+                   </div>
+                </td>
+                <td className="px-12 py-8">
+                   <div>
+                      <p className="font-black text-2xl text-white tracking-tight truncate max-w-sm">{r.name}</p>
+                      {r.hasTieBreakUsed && <p className="text-[9px] font-black uppercase text-amber-500/60 mt-1 flex items-center gap-1"><ArrowUpRight size={12}/> Tie-breaker applied</p>}
+                   </div>
+                </td>
+                <td className="px-12 py-8 text-slate-500 font-black uppercase tracking-tight text-xs">{r.district}</td>
+                <td className="px-12 py-8 text-right">
+                   <span className="font-black text-5xl text-blue-400 font-header tabular-nums drop-shadow-[0_0_15px_rgba(59,130,246,0.3)]">{r.displayScore}</span>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {rankings.map((r, i) => (
-                <tr key={r.id} className="hover:bg-white/[0.02] transition-all group">
-                  <td className="px-8 md:px-12 py-6 md:py-8">
-                     <div className="flex items-center gap-4 md:gap-6">
-                        <span className={`text-2xl md:text-3xl font-black tabular-nums ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-orange-400' : 'text-slate-700'}`}>
-                          {i + 1}
-                        </span>
-                        {i < 3 && <Medal size={28} className={i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-400'} />}
-                     </div>
-                  </td>
-                  <td className="px-8 md:px-12 py-6 md:py-8">
-                     <div className="min-w-0">
-                        <p className="font-black text-lg md:text-2xl text-white tracking-tight truncate max-w-xs">{r.name}</p>
-                        {r.hasTieBreakUsed && (
-                          <div className="flex items-center gap-1.5 text-[8px] font-black uppercase text-amber-500/80 mt-1">
-                            <ArrowUpRight size={10} /> Resolved via Weighted Tie-Breaker
-                          </div>
-                        )}
-                     </div>
-                  </td>
-                  <td className="px-8 md:px-12 py-6 md:py-8 text-slate-500 font-black uppercase tracking-tight text-[10px] md:text-xs">{r.district}</td>
-                  <td className="px-8 md:px-12 py-6 md:py-8 text-right">
-                     <span className="font-black text-3xl md:text-5xl text-blue-400 font-header tabular-nums drop-shadow-[0_0_15px_rgba(59,130,246,0.3)]">{r.displayScore}</span>
-                  </td>
-                </tr>
-              ))}
-              {rankings.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="py-20 text-center text-slate-600 font-black uppercase tracking-[0.2em] text-xs">
-                    Waiting for judge evaluation results...
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <div className="p-8 md:p-12 glass rounded-[2.5rem] md:rounded-[4rem] border border-white/5 text-center space-y-6 md:space-y-8 bg-gradient-to-b from-transparent to-blue-600/5">
-         <div className="flex items-center justify-center gap-4 text-slate-400">
-            <Users size={20} />
-            <h4 className="text-lg md:text-2xl font-black text-white font-header tracking-tight">Board of Judges Finality Clause</h4>
+      {/* Mobile/Tablet View Cards */}
+      <div className="lg:hidden space-y-4">
+        {rankings.map((r, i) => (
+          <div key={r.id} className="glass-card rounded-3xl p-6 border border-white/10 flex flex-col gap-4 relative overflow-hidden">
+            <div className="flex justify-between items-start">
+               <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${
+                    i === 0 ? 'bg-amber-400 text-amber-950' : 
+                    i === 1 ? 'bg-slate-300 text-slate-900' : 
+                    i === 2 ? 'bg-orange-400 text-orange-950' : 
+                    'bg-slate-800 text-slate-400'
+                  }`}>
+                    {i + 1}
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg text-white leading-tight">{r.name}</h3>
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{r.district}</p>
+                  </div>
+               </div>
+               <div className="text-right">
+                  <p className="text-[32px] font-black text-blue-400 font-header leading-none tabular-nums">{r.displayScore}</p>
+                  <p className="text-[8px] font-black uppercase text-slate-600 tracking-widest mt-1">Weighted Avg</p>
+               </div>
+            </div>
+            {r.hasTieBreakUsed && (
+              <div className="pt-3 border-t border-white/5">
+                <p className="text-[8px] font-black uppercase text-amber-500/60 flex items-center gap-1">
+                  <ArrowUpRight size={10}/> Technical tie-resolution applied
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="p-8 md:p-12 glass rounded-[2.5rem] border border-white/5 text-center space-y-6 bg-gradient-to-b from-transparent to-blue-600/5">
+         <div className="flex items-center justify-center gap-4 text-slate-500">
+            <BarChart3 size={20} />
+            <h4 className="text-lg md:text-xl font-black text-white font-header tracking-tight uppercase">Technical Audit Log</h4>
          </div>
-         <p className="text-xs md:text-sm text-slate-500 max-w-3xl mx-auto leading-relaxed md:leading-loose uppercase tracking-wide px-4">
-            "The Decision of the Board of Judges is Final and Irrevocable." Final scores represent the mathematical mean of all valid ballots, adjusted for technical penalties. Weighted category priority is used for automated tie-resolution in compliance with Regional RFOT standards.
+         <p className="text-[10px] md:text-xs text-slate-500 max-w-2xl mx-auto leading-loose uppercase tracking-widest px-4">
+            Standings are calculated based on the arithmetic mean of all judge ballots. Automated tie-resolution is based on the highest-weighted category as per the technical handbook.
          </p>
-         <div className="pt-4">
-           <span className="px-5 py-2 bg-white/5 border border-white/10 text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 rounded-full">Regional RFOT Technical Committee 2024</span>
+         <div className="pt-4 border-t border-white/5 inline-block mx-auto px-6">
+           <span className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-700 italic">Official RFOT Tabulation Office 2024</span>
          </div>
       </div>
     </div>
