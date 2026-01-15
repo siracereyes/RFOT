@@ -16,6 +16,7 @@ const App: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // Mappers to bridge CamelCase (Frontend) and SnakeCase (Supabase)
   const mapEvent = (db: any): Event => ({
@@ -53,7 +54,6 @@ const App: React.FC = () => {
     assignedEventId: db.assigned_event_id
   });
 
-  // 1. Initial Data Load and Auth Listener
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -89,13 +89,22 @@ const App: React.FC = () => {
         if (profile) {
           setCurrentUser(mapUser(profile));
         } else {
+          // Fallback: If no profile exists, this is the first Admin
           const fallbackUser: User = {
             id: session.user.id,
-            name: session.user.email?.split('@')[0] || 'User',
+            name: session.user.email?.split('@')[0] || 'Super Admin',
             role: UserRole.SUPER_ADMIN,
             email: session.user.email || ''
           };
           setCurrentUser(fallbackUser);
+          
+          // Optionally, auto-create the profile record if it doesn't exist
+          await supabase.from('profiles').upsert([{
+            id: session.user.id,
+            name: fallbackUser.name,
+            role: UserRole.SUPER_ADMIN,
+            email: fallbackUser.email
+          }]);
         }
       } else {
         setCurrentUser(null);
@@ -105,7 +114,6 @@ const App: React.FC = () => {
 
     fetchData();
 
-    // 2. Real-time Subscription with mapping
     const scoresSubscription = supabase
       .channel('realtime_scores')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, (payload) => {
@@ -131,23 +139,34 @@ const App: React.FC = () => {
   };
 
   const [loginCreds, setLoginCreds] = useState({ email: '', password: '' });
-  const [loginError, setLoginError] = useState('');
+  const [authError, setAuthError] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: loginCreds.email,
-      password: loginCreds.password,
-    });
-    
-    if (error) {
-      setLoginError(error.message);
-      setLoading(false);
+    setAuthError('');
+
+    if (isRegistering) {
+      const { error } = await supabase.auth.signUp({
+        email: loginCreds.email,
+        password: loginCreds.password,
+      });
+      if (error) {
+        setAuthError(error.message);
+        setLoading(false);
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginCreds.email,
+        password: loginCreds.password,
+      });
+      if (error) {
+        setAuthError(error.message);
+        setLoading(false);
+      }
     }
   };
 
-  // Database Mutators with Snake Case mapping
   const addEvent = async (e: Event) => {
     const { data, error } = await supabase.from('events').insert([{
       name: e.name,
@@ -214,7 +233,8 @@ const App: React.FC = () => {
       id: u.id,
       name: u.name,
       role: u.role,
-      assigned_event_id: u.assigned_event_id
+      assigned_event_id: u.assigned_event_id,
+      email: u.email
     }]).select();
     if (error) console.error(error);
     else if (data) setUsers(prev => [...prev, mapUser(data[0])]);
@@ -245,7 +265,7 @@ const App: React.FC = () => {
             <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring System</p>
           </div>
           
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleAuth} className="space-y-4">
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</label>
               <input 
@@ -267,16 +287,25 @@ const App: React.FC = () => {
               />
             </div>
             
-            {loginError && <p className="text-xs text-red-400 font-bold text-center">{loginError}</p>}
+            {authError && <p className="text-xs text-red-400 font-bold text-center">{authError}</p>}
 
             <button 
               type="submit"
               className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 border border-blue-400/20 group overflow-hidden relative"
             >
-              <span className="relative z-10">Sign In</span>
+              <span className="relative z-10">{isRegistering ? 'Initialize Admin Account' : 'Sign In'}</span>
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
             </button>
           </form>
+
+          <div className="text-center">
+            <button 
+              onClick={() => setIsRegistering(!isRegistering)}
+              className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors"
+            >
+              {isRegistering ? 'Already have an account? Log In' : 'First time? Create initial admin'}
+            </button>
+          </div>
           
           <div className="pt-6 border-t border-white/10 text-center text-slate-500 text-[10px] uppercase font-bold tracking-widest">
             Regional Management Portal
