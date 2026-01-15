@@ -127,13 +127,11 @@ const App: React.FC = () => {
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
-    const failSafe = setTimeout(() => setAuthLoading(false), 5000);
     const initialize = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) await resolveProfile(session);
       await fetchAllData();
       setAuthLoading(false);
-      clearTimeout(failSafe);
     };
     initialize();
 
@@ -149,7 +147,7 @@ const App: React.FC = () => {
         setAuthLoading(false);
       }
     });
-    return () => { subscription.unsubscribe(); clearTimeout(failSafe); };
+    return () => { subscription.unsubscribe(); };
   }, [fetchAllData]);
 
   const handleLogout = async () => {
@@ -184,9 +182,9 @@ const App: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 gap-4">
-        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-        <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Establishing Secure Session...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-4">
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading 2026 Core...</p>
       </div>
     );
   }
@@ -194,11 +192,11 @@ const App: React.FC = () => {
   return (
     <Router>
       {!currentUser ? (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950">
-          <div className="glass-card p-10 rounded-[2.5rem] w-full max-w-md border border-white/10 shadow-2xl space-y-8 animate-in zoom-in-95 duration-500">
+        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+          <div className="bg-white p-10 rounded-[3rem] w-full max-w-md border border-slate-200 shadow-2xl space-y-8">
             <div className="text-center">
-              <h1 className="text-4xl font-black font-header tracking-tight text-white">RFOT <span className="text-blue-400">2024</span></h1>
-              <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring System</p>
+              <h1 className="text-4xl font-black font-header tracking-tight text-slate-900">RFOT <span className="text-blue-600">2026</span></h1>
+              <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring Engine</p>
             </div>
             <form onSubmit={async (e) => {
               e.preventDefault();
@@ -211,21 +209,21 @@ const App: React.FC = () => {
               } catch (err: any) { alert(err.message); setAuthLoading(false); }
             }} className="space-y-4">
               <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email</label>
-                <input type="email" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.email} onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} />
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email</label>
+                <input type="email" required className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-slate-900" value={loginCreds.email} onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} />
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
-                <input type="password" required className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-white" value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Password</label>
+                <input type="password" required className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-slate-900" value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
               </div>
-              <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 border border-blue-400/20">
-                {isRegistering ? 'Initialize Admin' : 'Sign In'}
+              <button type="submit" className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-blue-100">
+                {isRegistering ? 'Initialize Platform' : 'Secure Sign In'}
               </button>
             </form>
             {registrationEnabled && (
-              <div className="text-center">
-                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors">
-                  {isRegistering ? 'Back to Login' : 'First time? Create initial admin'}
+              <div className="text-center pt-2">
+                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors">
+                  {isRegistering ? 'Return to Portal' : 'Administrator Setup'}
                 </button>
               </div>
             )}
@@ -234,8 +232,8 @@ const App: React.FC = () => {
       ) : (
         <Layout user={currentUser} onLogout={handleLogout}>
           {dataLoading && (
-            <div className="fixed top-0 left-0 w-full h-1 bg-blue-600/20 z-[100]">
-              <div className="h-full bg-blue-500 animate-[loading_2s_ease-in-out_infinite] w-1/3 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
+            <div className="fixed top-0 left-0 w-full h-1 bg-blue-100 z-[100]">
+              <div className="h-full bg-blue-600 animate-[loading_2s_ease-in-out_infinite] w-1/3"></div>
             </div>
           )}
           <Routes>
@@ -263,46 +261,13 @@ const App: React.FC = () => {
             }} onRefreshData={fetchAllData} />} />
             <Route path="/events" element={<Navigate to="/" />} />
             <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={async (s) => {
-              // Safety: Check if event is locked before saving
               const event = events.find(e => e.id === s.eventId);
-              if (event?.isLocked) {
-                console.error("Attempted to edit a locked event.");
-                throw new Error("This category is already finalized and locked.");
-              }
-
-              // Important: Look for existing score to ensure we UPDATE instead of just creating duplicates
-              const { data: existing, error: findError } = await supabase
-                .from('scores')
-                .select('id')
-                .eq('judge_id', s.judgeId)
-                .eq('participant_id', s.participantId)
-                .maybeSingle();
-
-              if (findError) {
-                console.error("Search error:", findError);
-              }
-
-              const payload: any = { 
-                judge_id: s.judgeId, 
-                participant_id: s.participantId, 
-                event_id: s.eventId, 
-                criteria_scores: s.criteriaScores, 
-                deductions: s.deductions,
-                total_score: s.totalScore, 
-                critique: s.critique 
-              };
-
-              // If record exists, Supabase needs the ID to perform an UPDATE
+              if (event?.isLocked) throw new Error("This category is already finalized.");
+              const { data: existing } = await supabase.from('scores').select('id').eq('judge_id', s.judgeId).eq('participant_id', s.participantId).maybeSingle();
+              const payload: any = { judge_id: s.judgeId, participant_id: s.participantId, event_id: s.eventId, criteria_scores: s.criteriaScores, deductions: s.deductions, total_score: s.totalScore, critique: s.critique };
               if (existing?.id) payload.id = existing.id;
-
-              console.log("Upserting payload:", payload);
               const { data, error } = await supabase.from('scores').upsert(payload).select();
-              
-              if (error) {
-                console.error("Upsert error details:", error);
-                throw error;
-              }
-              
+              if (error) throw error;
               const savedScore = mapScore(data[0]);
               setScores(prev => [...prev.filter(score => score.id !== savedScore.id), savedScore]);
             }} />} />

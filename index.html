@@ -4,18 +4,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RFOT | Regional Festival of Talents</title>
+    <title>RFOT 2026 | Regional Festival of Talents</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
       :root {
-        --primary-glow: radial-gradient(rgba(1, 65, 255, 0.4), rgba(1, 65, 255, 0));
-        --secondary-glow: conic-gradient(from 180deg at 50% 50%, #16abff33 0deg, #0885ff33 55deg, #54d6ff33 120deg, #0071ff33 160deg, transparent 360deg);
+        --primary-glow: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.05), transparent);
+        --secondary-glow: radial-gradient(circle at 80% 80%, rgba(99, 102, 241, 0.05), transparent);
       }
       body {
         font-family: 'Inter', sans-serif;
-        background: #020617;
-        color: white;
+        background: #f8fafc; /* slate-50 */
+        color: #0f172a; /* slate-900 */
         min-height: 100vh;
         overflow-x: hidden;
       }
@@ -26,55 +26,23 @@
         width: 100vw;
         height: 100vh;
         background: var(--primary-glow);
-        filter: blur(100px);
-        top: -20%;
-        left: -10%;
-        opacity: 0.5;
-        pointer-events: none;
-      }
-      body::after {
-        content: '';
-        position: fixed;
-        z-index: -1;
-        width: 100vw;
-        height: 100vh;
-        background: var(--secondary-glow);
-        filter: blur(80px);
-        bottom: -20%;
-        right: -10%;
-        opacity: 0.3;
+        top: 0;
+        left: 0;
         pointer-events: none;
       }
       .font-header {
         font-family: 'Plus Jakarta Sans', sans-serif;
       }
       .glass {
-        background: rgba(255, 255, 255, 0.02);
+        background: rgba(255, 255, 255, 0.7);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(226, 232, 240, 0.8);
       }
       .glass-card {
-        background: rgba(15, 23, 42, 0.4);
-        backdrop-filter: blur(15px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-      }
-      .glow-border {
-        position: relative;
-      }
-      .glow-border::after {
-        content: '';
-        position: absolute;
-        inset: -1px;
-        background: linear-gradient(45deg, transparent, rgba(59, 130, 246, 0.5), transparent);
-        z-index: -1;
-        border-radius: inherit;
-        opacity: 0;
-        transition: opacity 0.3s;
-      }
-      .glow-border:hover::after {
-        opacity: 1;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.04), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
       }
       @keyframes float {
         0% { transform: translateY(0px); }
@@ -85,17 +53,21 @@
         animation: float 6s ease-in-out infinite;
       }
       ::-webkit-scrollbar {
-        width: 6px;
+        width: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.2);
+        background: #f1f5f9;
       }
       ::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.1);
+        background: #cbd5e1;
         border-radius: 10px;
+        border: 2px solid #f1f5f9;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: rgba(59, 130, 246, 0.5);
+        background: #94a3b8;
+      }
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
       }
     </style>
   <script type="importmap">
