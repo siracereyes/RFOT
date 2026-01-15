@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { UserRole, Event, Participant, Score, User } from './types';
 import Layout from './components/Layout';
@@ -17,8 +17,8 @@ const App: React.FC = () => {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [isRegistering, setIsRegistering] = useState(false);
+  const initAttempted = useRef(false);
 
-  // Mappers to bridge CamelCase (Frontend) and SnakeCase (Supabase)
   const mapEvent = (db: any): Event => ({
     id: db.id,
     name: db.name,
@@ -88,23 +88,33 @@ const App: React.FC = () => {
         .from('profiles')
         .select('*')
         .eq('id', authSession.user.id)
-        .single();
+        .maybeSingle(); // Use maybeSingle to avoid 406 errors on missing profiles
       
       if (profile) {
         setCurrentUser(mapUser(profile));
       } else {
+        const meta = authSession.user.user_metadata;
+        // If it's a new sign up and we don't have a profile yet:
+        // Default to JUDGE unless this is an explicit Admin registration
+        const assignedRole = meta?.role || (isRegistering ? UserRole.SUPER_ADMIN : UserRole.JUDGE);
+        
         const fallbackUser: User = {
           id: authSession.user.id,
-          name: authSession.user.email?.split('@')[0] || 'Super Admin',
-          role: UserRole.SUPER_ADMIN,
-          email: authSession.user.email || ''
+          name: meta?.name || authSession.user.email?.split('@')[0] || 'New User',
+          role: assignedRole as UserRole,
+          email: authSession.user.email || '',
+          assignedEventId: meta?.assignedEventId
         };
+        
         setCurrentUser(fallbackUser);
+        
+        // Ensure profile exists in DB
         await supabase.from('profiles').upsert([{
           id: authSession.user.id,
           name: fallbackUser.name,
-          role: UserRole.SUPER_ADMIN,
-          email: fallbackUser.email
+          role: fallbackUser.role,
+          email: fallbackUser.email,
+          assigned_event_id: fallbackUser.assignedEventId
         }]);
       }
     } catch (err) {
@@ -113,14 +123,25 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    if (initAttempted.current) return;
+    initAttempted.current = true;
+
     const initApp = async () => {
+      // Safety timeout: don't let the loading screen hang forever
+      const timeout = setTimeout(() => {
+        if (loading) setLoading(false);
+      }, 5000);
+
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) await resolveProfile(session);
-        await fetchAllData();
+        if (session) {
+          await resolveProfile(session);
+          await fetchAllData();
+        }
       } catch (e) {
         console.error("Initialization error:", e);
       } finally {
+        clearTimeout(timeout);
         setLoading(false);
       }
     };
@@ -128,8 +149,14 @@ const App: React.FC = () => {
     initApp();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN') await resolveProfile(session);
-      else if (event === 'SIGNED_OUT') setCurrentUser(null);
+      if (event === 'SIGNED_IN' && session) {
+        await resolveProfile(session);
+        await fetchAllData();
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setUsers([]);
+        setEvents([]);
+      }
     });
 
     return () => {
@@ -138,8 +165,16 @@ const App: React.FC = () => {
   }, [fetchAllData]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setCurrentUser(null);
+    try {
+      setLoading(true);
+      await supabase.auth.signOut();
+      // Hard reset to clear all caches and states
+      localStorage.clear();
+      window.location.href = '/'; 
+    } catch (error) {
+      console.error("Logout error:", error);
+      window.location.reload();
+    }
   };
 
   const [loginCreds, setLoginCreds] = useState({ email: '', password: '' });
@@ -154,6 +189,7 @@ const App: React.FC = () => {
         const { error } = await supabase.auth.signUp({
           email: loginCreds.email,
           password: loginCreds.password,
+          options: { data: { role: UserRole.SUPER_ADMIN, name: 'Main Admin' } }
         });
         if (error) throw error;
       } else {
@@ -165,7 +201,6 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       setAuthError(error.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -229,7 +264,7 @@ const App: React.FC = () => {
     const { data, error } = await supabase.from('profiles').insert([{
       id: u.id,
       name: u.name,
-      role: u.role,
+      role: UserRole.JUDGE,
       assigned_event_id: u.assigned_event_id,
       email: u.email
     }]).select();
@@ -247,7 +282,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 gap-4">
         <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs animate-pulse">Establishing Secure Session...</p>
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Establishing Secure Session...</p>
       </div>
     );
   }

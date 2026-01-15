@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, Trash2, Key, UserCheck, Loader2, Save, Mail, ShieldCheck } from 'lucide-react';
+import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, Trash2, Key, UserCheck, Loader2, Save, Mail, ShieldCheck, AlertTriangle } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score } from '../types';
 import { SDO_LIST } from '../constants';
@@ -81,19 +81,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleCreateJudge = async () => {
     if (!judgeEmail || !judgePassword || !assignedEventId || !judgeName) return alert("Fill all details.");
+    
+    // Warning: Supabase client-side signUp will switch the current session to the new user.
+    if (!confirm("Note: Creating a new judge account will automatically sign you out from your Admin session for security. You will need to log back in as Admin afterward. Continue?")) return;
+
     setIsSubmitting(true);
     
-    // Auth Create
     const { data, error } = await supabase.auth.signUp({
       email: judgeEmail,
       password: judgePassword,
-      options: { data: { name: judgeName, role: UserRole.JUDGE, assignedEventId } }
+      options: { 
+        data: { 
+          name: judgeName, 
+          role: UserRole.JUDGE,
+          assignedEventId 
+        } 
+      }
     });
 
     if (error) {
       alert(error.message);
+      setIsSubmitting(false);
     } else if (data.user) {
-      // Profile Create (Handled by Prop to update App state)
+      // Profile Create
       await onAddJudge({
         id: data.user.id,
         name: judgeName,
@@ -101,19 +111,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         email: judgeEmail,
         assigned_event_id: assignedEventId
       });
-      setJudgeEmail(''); setJudgePassword(''); setJudgeName(''); setAssignedEventId(''); setShowJudgeModal(false);
-      alert("Judge account created successfully.");
+      alert("Judge account created. You have been signed out. Please log in again to manage more users.");
+      window.location.reload();
     }
-    setIsSubmitting(false);
   };
 
   const handleChangeJudgePassword = async () => {
     if (!newJudgePass || !showPasswordModal) return;
     setIsSubmitting(true);
-    // Note: Standard Supabase client can only change the current user's password.
-    // To change another user's password, we typically use the Admin API on the backend.
-    // For this prototype, we'll simulate the success or explain the requirement.
-    alert("In a production environment, this would call a secure Edge Function to update Auth.users. The requested password for " + showPasswordModal.name + " has been set to: " + newJudgePass);
+    // Simulating admin change - in production this needs an Edge Function
+    alert("Credential update request for " + showPasswordModal.name + " has been sent. In production, this requires the Supabase Admin API (Service Role).");
     setShowPasswordModal(null);
     setNewJudgePass('');
     setIsSubmitting(false);
@@ -199,7 +206,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-4">
                        <div className="w-10 h-10 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-black">
-                        {judge.name.charAt(0)}
+                        {judge.name?.charAt(0) || 'J'}
                        </div>
                        <div>
                          <p className="font-bold text-white leading-none">{judge.name}</p>
@@ -303,13 +310,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {showJudgeModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl">
           <div className="glass-card w-full max-w-md p-10 rounded-[3rem] border border-white/10">
-            <div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black font-header text-white">Register Judge</h3><button onClick={() => setShowJudgeModal(false)} className="text-slate-600 hover:text-white"><X /></button></div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black font-header text-white">Register Judge</h3><button onClick={() => setShowJudgeModal(false)} className="text-slate-600 hover:text-white"><X /></button></div>
+            
+            <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl mb-6 flex items-start gap-3">
+              <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
+              <p className="text-[10px] text-amber-200/70 font-bold uppercase tracking-widest leading-relaxed">
+                Caution: Creating an account will auto-switch the browser session. You will be signed out as Admin.
+              </p>
+            </div>
+
             <div className="space-y-6">
               <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Full Name</label><input type="text" value={judgeName} onChange={e => setJudgeName(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" /></div>
               <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Email</label><input type="email" value={judgeEmail} onChange={e => setJudgeEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" /></div>
               <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Password</label><input type="password" value={judgePassword} onChange={e => setJudgePassword(e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none" /></div>
               <div><label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Assign Event</label><select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-4 rounded-xl font-bold text-white outline-none"><option value="">Select Event</option>{events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
-              <button disabled={isSubmitting} onClick={handleCreateJudge} className="w-full bg-indigo-600 p-4 rounded-xl font-black uppercase tracking-widest text-white flex items-center justify-center gap-2">{isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />} Create Account</button>
+              <button disabled={isSubmitting} onClick={handleCreateJudge} className="w-full bg-indigo-600 p-4 rounded-xl font-black uppercase tracking-widest text-white flex items-center justify-center gap-2">{isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />} Confirm & Create</button>
             </div>
           </div>
         </div>
