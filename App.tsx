@@ -84,23 +84,21 @@ const App: React.FC = () => {
     }
 
     try {
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authSession.user.id)
-        .maybeSingle(); // Use maybeSingle to avoid 406 errors on missing profiles
+        .maybeSingle();
       
       if (profile) {
         setCurrentUser(mapUser(profile));
       } else {
         const meta = authSession.user.user_metadata;
-        // If it's a new sign up and we don't have a profile yet:
-        // Default to JUDGE unless this is an explicit Admin registration
         const assignedRole = meta?.role || (isRegistering ? UserRole.SUPER_ADMIN : UserRole.JUDGE);
         
         const fallbackUser: User = {
           id: authSession.user.id,
-          name: meta?.name || authSession.user.email?.split('@')[0] || 'New User',
+          name: meta?.name || authSession.user.email?.split('@')[0] || 'User',
           role: assignedRole as UserRole,
           email: authSession.user.email || '',
           assignedEventId: meta?.assignedEventId
@@ -108,67 +106,73 @@ const App: React.FC = () => {
         
         setCurrentUser(fallbackUser);
         
-        // Ensure profile exists in DB
-        await supabase.from('profiles').upsert([{
+        // Use a background task for profile creation to avoid blocking UI if DB is slow
+        supabase.from('profiles').upsert([{
           id: authSession.user.id,
           name: fallbackUser.name,
           role: fallbackUser.role,
           email: fallbackUser.email,
           assigned_event_id: fallbackUser.assignedEventId
-        }]);
+        }]).then(({ error: upsertError }) => {
+          if (upsertError) console.error("Profile upsert background error:", upsertError);
+        });
       }
     } catch (err) {
       console.error("Profile resolution error:", err);
     }
   };
 
+  const handleSessionChange = useCallback(async (session: any) => {
+    if (session) {
+      await resolveProfile(session);
+      await fetchAllData();
+    } else {
+      setCurrentUser(null);
+      setUsers([]);
+      setEvents([]);
+    }
+    setLoading(false);
+  }, [fetchAllData]);
+
   useEffect(() => {
     if (initAttempted.current) return;
     initAttempted.current = true;
 
     const initApp = async () => {
-      // Safety timeout: don't let the loading screen hang forever
+      // Hard safety timeout
       const timeout = setTimeout(() => {
-        if (loading) setLoading(false);
-      }, 5000);
+        setLoading(false);
+      }, 8000);
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          await resolveProfile(session);
-          await fetchAllData();
-        }
+        await handleSessionChange(session);
       } catch (e) {
         console.error("Initialization error:", e);
+        setLoading(false);
       } finally {
         clearTimeout(timeout);
-        setLoading(false);
       }
     };
 
     initApp();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        await resolveProfile(session);
-        await fetchAllData();
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-        setUsers([]);
-        setEvents([]);
+      // Re-run handleSessionChange for any significant event
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'SIGNED_OUT') {
+        await handleSessionChange(session);
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [fetchAllData]);
+  }, [handleSessionChange]);
 
   const handleLogout = async () => {
     try {
       setLoading(true);
       await supabase.auth.signOut();
-      // Hard reset to clear all caches and states
       localStorage.clear();
       window.location.href = '/'; 
     } catch (error) {
@@ -192,12 +196,14 @@ const App: React.FC = () => {
           options: { data: { role: UserRole.SUPER_ADMIN, name: 'Main Admin' } }
         });
         if (error) throw error;
+        // SIGNED_IN event will handle loading(false)
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: loginCreds.email,
           password: loginCreds.password,
         });
         if (error) throw error;
+        // SIGNED_IN event will handle loading(false)
       }
     } catch (error: any) {
       setAuthError(error.message);
