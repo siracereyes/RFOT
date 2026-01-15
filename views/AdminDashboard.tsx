@@ -94,7 +94,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     setIsSubmitting(true);
     try {
-      // 1. Create Auth User using the dedicated authClient (prevents current admin logout)
       const { data: authData, error: authError } = await authClient.auth.signUp({
         email: judgeEmail,
         password: judgePassword,
@@ -104,7 +103,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (authError) throw authError;
       if (!authData.user) throw new Error("Failed to create auth user.");
 
-      // 2. Call parent to create the profile record
       await onAddJudge({
         id: authData.user.id,
         name: judgeName,
@@ -112,7 +110,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         assigned_event_id: assignedEventId
       });
 
-      // 3. Reset and close
       setShowJudgeModal(false);
       setJudgeName('');
       setJudgeEmail('');
@@ -151,12 +148,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         break;
       case 'QUIZ':
         type = EventType.QUIZ_BEE;
-        newRounds = [
-          { id: generateId(), name: 'Easy Round', points: 1, isTieBreaker: false },
-          { id: generateId(), name: 'Average Round', points: 2, isTieBreaker: false },
-          { id: generateId(), name: 'Difficult Round', points: 3, isTieBreaker: false },
-          { id: generateId(), name: 'Clincher', points: 1, isTieBreaker: true }
-        ];
+        // Generate 5 Easy, 5 Moderate, 5 Difficult
+        for(let i=1; i<=5; i++) newRounds.push({ id: generateId(), name: `Easy Round ${i}`, points: 1 });
+        for(let i=1; i<=5; i++) newRounds.push({ id: generateId(), name: `Moderate Round ${i}`, points: 3 });
+        for(let i=1; i<=5; i++) newRounds.push({ id: generateId(), name: `Difficult Round ${i}`, points: 5 });
+        newRounds.push({ id: generateId(), name: 'Clincher Round', points: 1, isTieBreaker: true });
         break;
     }
 
