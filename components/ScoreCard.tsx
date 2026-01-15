@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Criterion, Participant, EventType, Round } from '../types';
-import { Save, User as UserIcon, MessageSquareQuote, Info, Hash, AlertTriangle, CheckCircle, BarChart3, Loader2, Lock } from 'lucide-react';
+import { Save, User as UserIcon, MessageSquareQuote, Info, Hash, AlertTriangle, CheckCircle, BarChart3, Loader2, Lock, Check } from 'lucide-react';
 
 interface ScoreCardProps {
   participant: Participant;
@@ -26,7 +26,8 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
   initialCritique = '', 
   onSave 
 }) => {
-  const [scores, setScores] = useState<Record<string, number>>(initialScores);
+  // Ensure scores is always an object to prevent crashes
+  const [scores, setScores] = useState<Record<string, number>>(initialScores || {});
   const [deductions, setDeductions] = useState<number>(initialDeductions);
   const [critique, setCritique] = useState(initialCritique);
   const [isSaving, setIsSaving] = useState(false);
@@ -36,27 +37,28 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
 
   // Sync state if initial props change (e.g., when selecting different participants)
   useEffect(() => {
-    setScores(initialScores);
+    setScores(initialScores || {});
     setDeductions(initialDeductions);
     setCritique(initialCritique);
   }, [initialScores, initialDeductions, initialCritique]);
 
   useEffect(() => {
-    const isScoresChanged = JSON.stringify(scores) !== JSON.stringify(initialScores);
+    const isScoresChanged = JSON.stringify(scores) !== JSON.stringify(initialScores || {});
     const isDeductionsChanged = deductions !== initialDeductions;
     const isCritiqueChanged = critique !== initialCritique;
     setHasUnsavedChanges(isScoresChanged || isDeductionsChanged || isCritiqueChanged);
   }, [scores, deductions, critique, initialScores, initialDeductions, initialCritique]);
 
   const rawTotal = isQuizBee 
-    ? rounds.reduce((sum, r) => sum + (scores[r.id] || 0), 0)
-    : criteria.reduce((sum, c) => sum + (scores[c.id] || 0), 0);
+    ? (rounds || []).reduce((sum, r) => sum + (scores[r.id] || 0), 0)
+    : (criteria || []).reduce((sum, c) => sum + (scores[c.id] || 0), 0);
 
   const total = Math.max(0, rawTotal - deductions);
 
-  const handleScoreChange = (id: string, value: string, max: number) => {
+  const handleScoreChange = (id: string, value: string | number, max: number) => {
     if (isLocked) return;
-    let num = parseFloat(value) || 0;
+    let num = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(num)) num = 0;
     if (num > max) num = max;
     if (num < 0) num = 0;
     
@@ -103,7 +105,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
           <div className="text-center sm:text-right flex items-center gap-6 md:gap-8">
              <div className="h-12 md:h-16 w-px bg-white/5 hidden sm:block"></div>
              <div>
-                <div className={`text-5xl md:text-6xl font-black font-header tabular-nums tracking-tighter drop-shadow-[0_0_20px_rgba(59,130,246,0.2)] ${isLocked ? 'text-slate-500' : 'text-blue-400'}`}>{total}</div>
+                <div className={`text-5xl md:text-6xl font-black font-header tabular-nums tracking-tighter drop-shadow-[0_0_20px_rgba(59,130,246,0.2)] ${isLocked ? 'text-slate-500' : 'text-blue-400'}`}>{total.toFixed(isQuizBee ? 0 : 2)}</div>
                 <div className="text-[9px] md:text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Calculated Score</div>
              </div>
           </div>
@@ -115,32 +117,52 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
           <div className="space-y-6">
             <div className="flex items-center gap-2 mb-2">
               <BarChart3 size={18} className={isLocked ? 'text-slate-600' : 'text-blue-400'} />
-              <h5 className="text-[10px] md:text-[11px] font-black uppercase tracking-widest text-white">Scoring Metrics</h5>
+              <h5 className="text-[10px] md:text-[11px] font-black uppercase tracking-widest text-white">
+                {isQuizBee ? 'Quiz Bee Rounds' : 'Scoring Metrics'}
+              </h5>
             </div>
             
             <div className="space-y-4 md:space-y-5">
               {isQuizBee ? (
-                rounds.map((r) => (
+                (rounds || []).length > 0 ? (rounds || []).map((r) => (
                   <div key={r.id} className={`group flex items-center gap-4 p-4 rounded-2xl border transition-all ${isLocked ? 'bg-white/[0.01] border-white/5' : 'bg-white/5 border-white/10 hover:border-blue-500/20'}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 overflow-hidden">
                         {r.isTieBreaker && <span className="shrink-0 bg-amber-500/20 text-amber-400 text-[8px] font-black uppercase px-2 py-0.5 rounded-full border border-amber-500/30">Clincher</span>}
-                        <label className="text-xs font-bold text-slate-300 truncate">{r.name}</label>
+                        <label className="text-xs font-bold text-slate-300 truncate">{r.name || 'Unnamed Round'}</label>
                       </div>
                       <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Points: {r.points}</p>
                     </div>
-                    <input
-                      type="number"
-                      disabled={isLocked || isSaving}
-                      value={scores[r.id] || ''}
-                      onChange={(e) => handleScoreChange(r.id, e.target.value, 1000)}
-                      className={`w-16 md:w-20 bg-slate-950 border border-white/10 rounded-xl py-2 px-1 text-lg font-black text-center outline-none transition-all shadow-inner ${isLocked ? 'text-slate-600' : 'text-blue-400 focus:border-blue-500'}`}
-                      placeholder="0"
-                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={isLocked || isSaving}
+                        onClick={() => handleScoreChange(r.id, scores[r.id] === r.points ? 0 : r.points, 1000)}
+                        className={`p-2 rounded-xl transition-all border ${
+                          scores[r.id] === r.points 
+                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' 
+                            : 'bg-white/5 border-white/10 text-slate-500 hover:text-white'
+                        }`}
+                        title="Mark Correct"
+                      >
+                        <Check size={18} />
+                      </button>
+                      <input
+                        type="number"
+                        disabled={isLocked || isSaving}
+                        value={scores[r.id] ?? ''}
+                        onChange={(e) => handleScoreChange(r.id, e.target.value, 1000)}
+                        className={`w-14 md:w-16 bg-slate-950 border border-white/10 rounded-xl py-2 px-1 text-base font-black text-center outline-none transition-all shadow-inner ${isLocked ? 'text-slate-600' : 'text-blue-400 focus:border-blue-500'}`}
+                        placeholder="0"
+                      />
+                    </div>
                   </div>
-                ))
+                )) : (
+                  <div className="p-8 text-center border border-dashed border-white/10 rounded-2xl opacity-30">
+                    <p className="text-[10px] text-slate-600 font-black uppercase tracking-widest">No rounds defined for this contest</p>
+                  </div>
+                )
               ) : (
-                criteria.map((c) => (
+                (criteria || []).map((c) => (
                   <div key={c.id} className="space-y-2 group">
                     <div className="flex justify-between items-end gap-2">
                       <label className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5 truncate">
@@ -153,7 +175,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                       <input
                         type="number"
                         disabled={isLocked || isSaving}
-                        value={scores[c.id] || ''}
+                        value={scores[c.id] ?? ''}
                         onChange={(e) => handleScoreChange(c.id, e.target.value, c.weight)}
                         placeholder="0.0"
                         className={`w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl px-5 py-3 md:py-4 text-xl md:text-2xl font-black focus:border-blue-500/50 outline-none transition-all placeholder:text-slate-800 ${
@@ -178,7 +200,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
               <input 
                 type="number"
                 disabled={isLocked || isSaving}
-                value={deductions || ''}
+                value={deductions ?? 0}
                 onChange={(e) => setDeductions(Math.max(0, parseFloat(e.target.value) || 0))}
                 placeholder="0"
                 className={`w-full bg-slate-950/40 border border-white/5 rounded-xl md:rounded-2xl px-6 py-3 md:py-4 text-2xl md:text-3xl font-black outline-none transition-all shadow-inner ${isLocked ? 'text-slate-600' : 'text-red-400 focus:border-red-500/30'}`}
@@ -191,7 +213,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
                 <MessageSquareQuote size={16} className={isLocked ? 'text-slate-700' : 'text-blue-400'} /> Judge Remarks
               </label>
               <textarea
-                value={critique}
+                value={critique || ''}
                 onChange={(e) => setCritique(e.target.value)}
                 disabled={isLocked || isSaving}
                 placeholder="Qualitative feedback..."

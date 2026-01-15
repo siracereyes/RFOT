@@ -101,7 +101,6 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-6">
-      {/* Dynamic Header Stat Bar */}
       <div className="glass-card rounded-3xl p-5 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 border border-white/10 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-white/5">
           <div 
@@ -137,7 +136,6 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Responsive Side Panel */}
         <div className={`
           w-full lg:w-80 xl:w-96 shrink-0 space-y-4 lg:sticky lg:top-24 
           ${!showMobileList ? 'hidden lg:block' : 'block'}
@@ -201,7 +199,6 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
           </div>
         </div>
 
-        {/* Scoring View */}
         <div className={`
           flex-1 w-full animate-in fade-in zoom-in-95 duration-500
           ${showMobileList ? 'hidden lg:block' : 'block'}
@@ -222,9 +219,9 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
                 rounds={currentEvent.rounds}
                 type={currentEvent.type}
                 isLocked={currentEvent.isLocked || isSubmitting} 
-                initialScores={getParticipantScore(selectedParticipant.id)?.criteriaScores}
-                initialDeductions={getParticipantScore(selectedParticipant.id)?.deductions}
-                initialCritique={getParticipantScore(selectedParticipant.id)?.critique}
+                initialScores={getParticipantScore(selectedParticipant.id)?.criteriaScores || {}}
+                initialDeductions={getParticipantScore(selectedParticipant.id)?.deductions || 0}
+                initialCritique={getParticipantScore(selectedParticipant.id)?.critique || ''}
                 onSave={(scores, deds, critique) => handleSaveScore(selectedParticipant.id, scores, deds, critique)}
               />
             </div>
