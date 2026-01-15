@@ -16,7 +16,7 @@ export const SDO_LIST = [
   "SDO Parañaque",
   "SDO Pasay",
   "SDO Pasig",
-  "SDO Quezon",
+  "SDO Quezon City",
   "SDO San Juan",
   "SDO Taguig and Pateros",
   "SDO Valenzuela"

@@ -33,7 +33,6 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
     setIsSubmitting(true);
     const totalScore = Object.values(criteriaScores).reduce((sum, s) => sum + s, 0);
     
-    // We pass an empty ID here; App.tsx will resolve the correct UUID or let Supabase generate it
     const newScore: Score = {
       id: '', 
       judgeId: judge.id,
@@ -92,20 +91,6 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
               {currentEvent?.name || 'Loading...'}
             </div>
           </div>
-          <div className="flex items-end gap-2">
-            <button 
-              onClick={() => setViewMode('grid')}
-              className={`p-3.5 rounded-2xl transition-all ${viewMode === 'grid' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white/5 text-slate-500 hover:text-white'}`}
-            >
-              <LayoutGrid size={20} />
-            </button>
-            <button 
-              onClick={() => setViewMode('list')}
-              className={`p-3.5 rounded-2xl transition-all ${viewMode === 'list' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white/5 text-slate-500 hover:text-white'}`}
-            >
-              <List size={20} />
-            </button>
-          </div>
         </div>
       </div>
 
@@ -127,7 +112,7 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
           <p className="text-slate-600 italic text-lg font-medium">No results match your current filter.</p>
         </div>
       ) : (
-        <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 gap-8" : "space-y-6"}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {filteredParticipants.map(participant => {
             const existingScore = getParticipantScore(participant.id);
             return (
@@ -136,6 +121,8 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
                   <ScoreCard 
                     participant={participant} 
                     criteria={currentEvent.criteria} 
+                    rounds={currentEvent.rounds}
+                    type={currentEvent.type}
                     isLocked={currentEvent.isLocked || isSubmitting} 
                     initialScores={existingScore?.criteriaScores}
                     initialCritique={existingScore?.critique}

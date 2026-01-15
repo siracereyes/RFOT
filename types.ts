@@ -14,13 +14,14 @@ export interface Criterion {
   id: string;
   name: string;
   weight: number;
-  description?: string; // Guidance for judges
+  description?: string;
 }
 
 export interface Round {
   id: string;
   name: string;
   points: number;
+  isTieBreaker?: boolean;
 }
 
 export interface Event {
@@ -29,8 +30,8 @@ export interface Event {
   type: EventType;
   criteria: Criterion[];
   rounds?: Round[];
-  numRounds?: number; // Quiz Bee specific
-  hasTieBreak?: boolean; // Quiz Bee specific
+  numRounds?: number;
+  hasTieBreak?: boolean;
   isLocked: boolean;
   eventAdminId: string;
 }
@@ -47,7 +48,7 @@ export interface Score {
   judgeId: string;
   participantId: string;
   eventId: string;
-  criteriaScores: Record<string, number>; // criterionId -> score
+  criteriaScores: Record<string, number>; // criterionId -> score OR roundId -> score
   totalScore: number;
   critique?: string;
 }
@@ -57,6 +58,6 @@ export interface User {
   name: string;
   role: UserRole;
   email: string;
-  password?: string; // Added for login
+  password?: string;
   assignedEventId?: string;
 }
