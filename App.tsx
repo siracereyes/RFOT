@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
   const initRef = useRef(false);
 
@@ -58,28 +59,38 @@ const App: React.FC = () => {
   const fetchAllData = useCallback(async () => {
     setDataLoading(true);
     try {
-      const results = await Promise.allSettled([
+      const [eventsRes, participantsRes, scoresRes, profilesRes, settingsRes] = await Promise.all([
         supabase.from('events').select('*'),
         supabase.from('participants').select('*'),
         supabase.from('scores').select('*'),
-        supabase.from('profiles').select('*')
+        supabase.from('profiles').select('*'),
+        supabase.from('settings').select('*').eq('key', 'admin_registration_enabled').maybeSingle()
       ]);
 
-      results.forEach((res, idx) => {
-        if (res.status === 'fulfilled' && res.value.data) {
-          const data = res.value.data;
-          if (idx === 0) setEvents(data.map(mapEvent));
-          if (idx === 1) setParticipants(data.map(mapParticipant));
-          if (idx === 2) setScores(data.map(mapScore));
-          if (idx === 3) setUsers(data.map(mapUser));
-        }
-      });
+      if (eventsRes.data) setEvents(eventsRes.data.map(mapEvent));
+      if (participantsRes.data) setParticipants(participantsRes.data.map(mapParticipant));
+      if (scoresRes.data) setScores(scoresRes.data.map(mapScore));
+      if (profilesRes.data) setUsers(profilesRes.data.map(mapUser));
+      if (settingsRes.data) setRegistrationEnabled(settingsRes.data.value === 'true');
+      
     } catch (e) {
       console.error("Data fetch error:", e);
     } finally {
       setDataLoading(false);
     }
   }, []);
+
+  const toggleRegistration = async (enabled: boolean) => {
+    setRegistrationEnabled(enabled);
+    const { error } = await supabase
+      .from('settings')
+      .upsert({ key: 'admin_registration_enabled', value: enabled.toString() }, { onConflict: 'key' });
+    
+    if (error) {
+      console.error("Failed to update registration setting:", error);
+      // Optional: Add toast notification for failure
+    }
+  };
 
   const resolveProfile = async (authSession: any) => {
     if (!authSession?.user) {
@@ -138,6 +149,10 @@ const App: React.FC = () => {
       if (session) {
         await resolveProfile(session);
         await fetchAllData();
+      } else {
+        // Even if not logged in, fetch settings to know if "First Time?" should be shown
+        const { data: setting } = await supabase.from('settings').select('*').eq('key', 'admin_registration_enabled').maybeSingle();
+        if (setting) setRegistrationEnabled(setting.value === 'true');
       }
       setAuthLoading(false);
       clearTimeout(failSafe);
@@ -233,7 +248,6 @@ const App: React.FC = () => {
   };
 
   const submitScore = async (s: Score) => {
-    // 1. Check if a record already exists for this judge/participant combo
     const { data: existing } = await supabase
       .from('scores')
       .select('id')
@@ -250,7 +264,6 @@ const App: React.FC = () => {
       critique: s.critique
     };
 
-    // If it exists, use that UUID to update. If not, don't send an ID so Supabase generates a new UUID.
     if (existing?.id) {
       payload.id = existing.id;
     }
@@ -267,7 +280,6 @@ const App: React.FC = () => {
 
     const savedScore = mapScore(data[0]);
 
-    // Optimistically update local state
     setScores(prev => {
       const filtered = prev.filter(score => score.id !== savedScore.id);
       return [...filtered, savedScore];
@@ -323,11 +335,13 @@ const App: React.FC = () => {
             </button>
           </form>
 
-          <div className="text-center">
-            <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors">
-              {isRegistering ? 'Already have an account? Log In' : 'First time? Create initial admin'}
-            </button>
-          </div>
+          {registrationEnabled && (
+            <div className="text-center">
+              <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors">
+                {isRegistering ? 'Already have an account? Log In' : 'First time? Create initial admin'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -342,8 +356,8 @@ const App: React.FC = () => {
           </div>
         )}
         <Routes>
-          <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
-          <Route path="/events" element={<AdminDashboard events={events} participants={participants} users={users} scores={scores} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
+          <Route path="/" element={currentUser.role === UserRole.JUDGE ? <Navigate to="/scoring" /> : <AdminDashboard events={events} participants={participants} users={users} scores={scores} registrationEnabled={registrationEnabled} onToggleRegistration={toggleRegistration} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
+          <Route path="/events" element={<AdminDashboard events={events} participants={participants} users={users} scores={scores} registrationEnabled={registrationEnabled} onToggleRegistration={toggleRegistration} onAddEvent={addEvent} onUpdateEvent={updateEvent} onAddParticipant={addParticipant} onUpdateParticipant={updateParticipant} onDeleteParticipant={deleteParticipant} onAddJudge={addJudge} onRemoveJudge={removeJudge} />} />
           <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={submitScore} />} />
           <Route path="/public" element={<PublicLeaderboard events={events} participants={participants} scores={scores} />} />
           <Route path="*" element={<Navigate to="/" />} />

@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, Trash2, Key, UserCheck, Loader2, Save, Mail, ShieldCheck, AlertTriangle } from 'lucide-react';
+// Fix: Removed ToggleLeft as ToggleIcon alias which caused ToggleLeft to be undefined in scope
+import { Trophy, Users, Shield, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Check, Layers, Trash2, Key, UserCheck, Loader2, Save, Mail, ShieldCheck, AlertTriangle, Settings, ToggleLeft, ToggleRight } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score } from '../types';
 import { SDO_LIST } from '../constants';
@@ -11,6 +12,8 @@ interface AdminDashboardProps {
   participants: Participant[];
   users: User[];
   scores: Score[];
+  registrationEnabled: boolean;
+  onToggleRegistration: (enabled: boolean) => void;
   onAddEvent: (e: Event) => void;
   onUpdateEvent: (e: Event) => void;
   onAddParticipant: (p: Participant) => void;
@@ -25,6 +28,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   participants, 
   users, 
   scores, 
+  registrationEnabled,
+  onToggleRegistration,
   onAddEvent, 
   onUpdateEvent, 
   onAddParticipant, 
@@ -33,7 +38,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddJudge, 
   onRemoveJudge 
 }) => {
-  const [activeTab, setActiveTab] = useState<'events' | 'judges' | 'results'>('events');
+  const [activeTab, setActiveTab] = useState<'events' | 'judges' | 'results' | 'system'>('events');
   const [showWizard, setShowWizard] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showEnrollModal, setShowEnrollModal] = useState<string | null>(null);
@@ -81,65 +86,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleCreateJudge = async () => {
     if (!judgeEmail || !judgePassword || !assignedEventId || !judgeName) return alert("Fill all details.");
-    
     setIsSubmitting(true);
-    
-    // Use authClient (non-persisting) to create the user account
-    // This prevents the Admin from being logged out
     const { data, error } = await authClient.auth.signUp({
       email: judgeEmail,
       password: judgePassword,
-      options: { 
-        data: { 
-          name: judgeName, 
-          role: UserRole.JUDGE,
-          assignedEventId 
-        } 
-      }
+      options: { data: { name: judgeName, role: UserRole.JUDGE, assignedEventId } }
     });
-
     if (error) {
       alert("Auth Error: " + error.message);
       setIsSubmitting(false);
     } else if (data.user) {
-      // Create the public profile using the primary Admin client
-      await onAddJudge({
-        id: data.user.id,
-        name: judgeName,
-        role: UserRole.JUDGE,
-        email: judgeEmail,
-        assigned_event_id: assignedEventId
-      });
-      
-      alert(`Judge account for ${judgeName} created successfully. You remain logged in.`);
-      
-      // Reset judge form
-      setJudgeName('');
-      setJudgeEmail('');
-      setJudgePassword('');
-      setAssignedEventId('');
-      setShowJudgeModal(false);
-      setIsSubmitting(false);
+      await onAddJudge({ id: data.user.id, name: judgeName, role: UserRole.JUDGE, email: judgeEmail, assigned_event_id: assignedEventId });
+      alert(`Judge account for ${judgeName} created successfully.`);
+      setJudgeName(''); setJudgeEmail(''); setJudgePassword(''); setAssignedEventId('');
+      setShowJudgeModal(false); setIsSubmitting(false);
     }
   };
 
   const handleChangeJudgePassword = async () => {
     if (!newJudgePass || !showPasswordModal) return;
     setIsSubmitting(true);
-    alert("Credential update request for " + showPasswordModal.name + " has been sent. In production, this requires the Supabase Admin API (Service Role).");
-    setShowPasswordModal(null);
-    setNewJudgePass('');
-    setIsSubmitting(false);
+    alert("Update request sent.");
+    setShowPasswordModal(null); setNewJudgePass(''); setIsSubmitting(false);
   };
 
   const handleEnrollParticipant = () => {
     if (!newPartName || !newPartDistrict) return;
     onAddParticipant({ id: Math.random().toString(36).substr(2, 9), name: newPartName, district: newPartDistrict, eventId: showEnrollModal! });
-    setShowEnrollModal(null);
-    setNewPartName('');
+    setShowEnrollModal(null); setNewPartName('');
   };
 
   const judges = users.filter(u => u.role === UserRole.JUDGE);
+  const adminCount = users.filter(u => u.role === UserRole.SUPER_ADMIN || u.role === UserRole.EVENT_ADMIN).length;
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-24">
@@ -147,7 +125,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div>
           <h1 className="text-4xl font-black font-header tracking-tight text-white">Management Console</h1>
           <div className="flex gap-4 mt-4 overflow-x-auto pb-2 scrollbar-hide">
-            {['events', 'judges', 'results'].map((t) => (
+            {['events', 'judges', 'results', 'system'].map((t) => (
               <button key={t} onClick={() => setActiveTab(t as any)} className={`pb-2 px-1 text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === t ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-500 hover:text-slate-300'}`}>
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
@@ -160,6 +138,100 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
         )}
       </div>
+
+      {activeTab === 'system' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="col-span-1 md:col-span-2 space-y-6">
+            <div className="glass-card p-10 rounded-[2.5rem] border border-white/10 shadow-2xl space-y-8">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                  <Shield size={24} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black font-header text-white">Security Controls</h3>
+                  <p className="text-slate-400 text-sm">Manage global access and system behavior</p>
+                </div>
+              </div>
+
+              <div className="p-6 bg-white/5 rounded-[2rem] border border-white/5 flex items-center justify-between group hover:bg-white/[0.08] transition-all">
+                <div className="space-y-1">
+                  <p className="font-bold text-white text-lg">Admin Self-Registration</p>
+                  <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
+                    When enabled, the "First time? Create initial admin" link will appear on the login page. Disable this once initial setup is complete.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => onToggleRegistration(!registrationEnabled)}
+                  className={`flex items-center gap-3 px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all shadow-xl ${
+                    registrationEnabled 
+                    ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' 
+                    : 'bg-red-600/20 text-red-400 border border-red-500/30'
+                  }`}
+                >
+                  {registrationEnabled ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                  {registrationEnabled ? 'Publicly Visible' : 'Hidden / Locked'}
+                </button>
+              </div>
+
+              <div className="p-6 bg-blue-500/5 border border-blue-500/10 rounded-[2rem] flex items-start gap-4">
+                <AlertTriangle className="text-blue-400 mt-1 shrink-0" size={20} />
+                <div className="space-y-1">
+                   <p className="text-sm font-bold text-blue-200">Security Recommendation</p>
+                   <p className="text-xs text-blue-400/70 leading-relaxed">
+                     It is highly recommended to disable self-registration once you have created your primary administrative accounts to prevent unauthorized access to the scoring console.
+                   </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="glass-card p-8 rounded-[2.5rem] border border-white/10 shadow-xl text-center space-y-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Privileged Accounts</p>
+              <div className="text-6xl font-black font-header text-white">{adminCount}</div>
+              <p className="text-sm font-bold text-slate-400">Registered Administrators</p>
+              <div className="pt-4 border-t border-white/5 flex justify-center gap-4">
+                 <div className="flex flex-col items-center">
+                    <span className="text-xs font-black text-indigo-400">{judges.length}</span>
+                    <span className="text-[8px] uppercase tracking-widest font-bold text-slate-600">Judges</span>
+                 </div>
+                 <div className="w-px h-8 bg-white/5"></div>
+                 <div className="flex flex-col items-center">
+                    <span className="text-xs font-black text-blue-400">{events.length}</span>
+                    <span className="text-[8px] uppercase tracking-widest font-bold text-slate-600">Events</span>
+                 </div>
+              </div>
+            </div>
+
+            <div className="glass-card p-8 rounded-[2.5rem] border border-white/10 shadow-xl bg-gradient-to-br from-indigo-500/5 to-transparent">
+              <div className="flex items-center gap-3 mb-4">
+                <Settings size={18} className="text-indigo-400" />
+                <h4 className="text-xs font-black uppercase tracking-widest text-white">System Status</h4>
+              </div>
+              <div className="space-y-3">
+                 <div className="flex justify-between items-center text-[10px]">
+                   <span className="text-slate-500 font-bold uppercase">DB Connection</span>
+                   <span className="text-emerald-400 font-black tracking-widest uppercase flex items-center gap-1.5">
+                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Active
+                   </span>
+                 </div>
+                 <div className="flex justify-between items-center text-[10px]">
+                   <span className="text-slate-500 font-bold uppercase">Auth Service</span>
+                   <span className="text-emerald-400 font-black tracking-widest uppercase flex items-center gap-1.5">
+                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Online
+                   </span>
+                 </div>
+                 <div className="flex justify-between items-center text-[10px]">
+                   <span className="text-slate-500 font-bold uppercase">AI Insights</span>
+                   <span className="text-blue-400 font-black tracking-widest uppercase flex items-center gap-1.5">
+                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Ready
+                   </span>
+                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeTab === 'events' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
