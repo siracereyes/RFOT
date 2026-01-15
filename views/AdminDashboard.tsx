@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Users, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Trash2, Loader2, Save, Hash, RefreshCw, BookOpen, Music, Microscope, Layout, Sparkles, AlertCircle } from 'lucide-react';
+import { Trophy, Users, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Trash2, Loader2, Save, Hash, RefreshCw, BookOpen, Music, Microscope, Layout, Sparkles, AlertCircle, Mail, Key, UserCheck } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score, Round } from '../types';
 import { SDO_LIST } from '../constants';
+import { authClient } from '../supabase';
 
 interface AdminDashboardProps {
   events: Event[];
@@ -42,16 +43,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showWizard, setShowWizard] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showEnrollModal, setShowEnrollModal] = useState<string | null>(null);
+  const [showJudgeModal, setShowJudgeModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form states
+  // Event Form states
   const [eventName, setEventName] = useState('');
   const [eventType, setEventType] = useState<EventType>(EventType.JUDGING);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
   
+  // Participant Form states
   const [newPartName, setNewPartName] = useState('');
   const [newPartDistrict, setNewPartDistrict] = useState(SDO_LIST[0]);
+
+  // Judge Form states
+  const [judgeEmail, setJudgeEmail] = useState('');
+  const [judgePassword, setJudgePassword] = useState('');
+  const [judgeName, setJudgeName] = useState('');
+  const [assignedEventId, setAssignedEventId] = useState('');
 
   const judges = useMemo(() => 
     users.filter(u => u.role === UserRole.JUDGE || u.role?.toString().toUpperCase() === 'JUDGE'),
@@ -75,6 +85,46 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsRefreshing(true);
     await onRefreshData();
     setTimeout(() => setIsRefreshing(false), 800);
+  };
+
+  const handleCreateJudge = async () => {
+    if (!judgeEmail || !judgePassword || !judgeName || !assignedEventId) {
+      return alert("Please fill in all judge details and assign a contest.");
+    }
+
+    setIsSubmitting(true);
+    try {
+      // 1. Create Auth User using the dedicated authClient (prevents current admin logout)
+      const { data: authData, error: authError } = await authClient.auth.signUp({
+        email: judgeEmail,
+        password: judgePassword,
+        options: { data: { name: judgeName, role: UserRole.JUDGE, assignedEventId } }
+      });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error("Failed to create auth user.");
+
+      // 2. Call parent to create the profile record
+      await onAddJudge({
+        id: authData.user.id,
+        name: judgeName,
+        email: judgeEmail,
+        assigned_event_id: assignedEventId
+      });
+
+      // 3. Reset and close
+      setShowJudgeModal(false);
+      setJudgeName('');
+      setJudgeEmail('');
+      setJudgePassword('');
+      setAssignedEventId('');
+      alert("Judge account created successfully!");
+    } catch (err: any) {
+      console.error(err);
+      alert("Error creating judge: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const applyTemplate = (category: string) => {
@@ -181,6 +231,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <Plus size={18} /> New Contest
             </button>
           )}
+          {activeTab === 'judges' && (
+            <button onClick={() => setShowJudgeModal(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 md:px-6 py-3 md:py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] md:text-xs transition-all shadow-lg shadow-indigo-600/20">
+              <UserPlus size={18} /> New Judge
+            </button>
+          )}
         </div>
       </div>
 
@@ -234,7 +289,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-8 custom-scrollbar">
-              {/* Basic Info */}
               <div className="space-y-6">
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Contest Category Name</label>
@@ -271,7 +325,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Templates */}
               {!editingEventId && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
@@ -292,7 +345,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
 
-              {/* Dynamic Logic Builder */}
               <div className="pt-6 border-t border-white/5">
                 {eventType === EventType.JUDGING ? (
                   <WeightingWizard initialCriteria={criteria} onChange={setCriteria} />
@@ -337,11 +389,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </div>
                       ))}
-                      {rounds.length === 0 && (
-                        <div className="p-8 text-center border border-dashed border-white/10 rounded-2xl">
-                          <p className="text-[10px] text-slate-600 font-black uppercase tracking-widest">No rounds defined. Add at least one.</p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
@@ -354,10 +401,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <div className="flex gap-4">
                 <button onClick={resetForm} className="px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all">Discard</button>
-                <button 
-                  onClick={handleSaveEvent}
-                  className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-600/20 flex items-center gap-2"
-                >
+                <button onClick={handleSaveEvent} className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-600/20 flex items-center gap-2">
                   <Save size={16} /> Finalize Contest
                 </button>
               </div>
@@ -378,34 +422,65 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
              <div className="space-y-6">
                 <div>
                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Full Name / Group Name</label>
-                   <input 
-                    type="text" 
-                    value={newPartName}
-                    onChange={e => setNewPartName(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:border-blue-500"
-                    placeholder="Contestant Identifier"
-                   />
+                   <input type="text" value={newPartName} onChange={e => setNewPartName(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:border-blue-500" placeholder="Contestant Identifier" />
                 </div>
                 <div>
                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">SDO District</label>
-                   <select 
-                    value={newPartDistrict}
-                    onChange={e => setNewPartDistrict(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold outline-none appearance-none"
-                   >
+                   <select value={newPartDistrict} onChange={e => setNewPartDistrict(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold outline-none appearance-none" >
                      {SDO_LIST.map(s => <option key={s} value={s} className="bg-slate-900">{s}</option>)}
                    </select>
                 </div>
-                <button 
-                  onClick={() => {
-                    if (!newPartName) return;
-                    onAddParticipant({ id: '', name: newPartName, district: newPartDistrict, eventId: showEnrollModal });
-                    setNewPartName('');
-                    setShowEnrollModal(null);
-                  }}
-                  className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-blue-600/20 transition-all"
-                >
+                <button onClick={() => { if (!newPartName) return; onAddParticipant({ id: '', name: newPartName, district: newPartDistrict, eventId: showEnrollModal }); setNewPartName(''); setShowEnrollModal(null); }} className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-blue-600/20 transition-all" >
                   Enroll Official
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Judge Creation Modal */}
+      {showJudgeModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xl" onClick={() => setShowJudgeModal(false)}></div>
+          <div className="relative w-full max-w-lg glass-card rounded-[2.5rem] border border-white/10 shadow-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+             <div className="p-8 border-b border-white/10 bg-white/[0.02] flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-black font-header text-white">Register Evaluator</h3>
+                  <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">Authorized Judging Account</p>
+                </div>
+                <button onClick={() => setShowJudgeModal(false)} className="p-2 text-slate-500 hover:text-white transition-all"><X size={24}/></button>
+             </div>
+             
+             <div className="p-8 space-y-6">
+                <div className="space-y-4">
+                  <div className="relative">
+                    <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                    <input type="text" placeholder="Full Professional Name" value={judgeName} onChange={e => setJudgeName(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-4 text-white font-bold outline-none focus:border-indigo-500" />
+                  </div>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                    <input type="email" placeholder="Email Address" value={judgeEmail} onChange={e => setJudgeEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-4 text-white font-bold outline-none focus:border-indigo-500" />
+                  </div>
+                  <div className="relative">
+                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                    <input type="password" placeholder="Access Password" value={judgePassword} onChange={e => setJudgePassword(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-4 text-white font-bold outline-none focus:border-indigo-500" />
+                  </div>
+                  <div className="relative">
+                    <Trophy className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                    <select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-10 py-4 text-white font-bold outline-none appearance-none focus:border-indigo-500">
+                      <option value="" className="bg-slate-900">Assign to Contest...</option>
+                      {events.map(ev => <option key={ev.id} value={ev.id} className="bg-slate-900">{ev.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleCreateJudge}
+                  disabled={isSubmitting}
+                  className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-600/20 transition-all flex items-center justify-center gap-3"
+                >
+                  {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <UserCheck size={20} />}
+                  Confirm Registration
                 </button>
              </div>
           </div>
@@ -453,7 +528,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Analytics Placeholder */}
       {activeTab === 'results' && (
         <div className="p-20 text-center glass rounded-[3rem] border border-dashed border-white/10 opacity-30">
           <Sparkles size={48} className="mx-auto mb-4 text-slate-700" />
