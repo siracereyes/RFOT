@@ -33,8 +33,9 @@ const JudgeDashboard: React.FC<JudgeDashboardProps> = ({ events, participants, j
     setIsSubmitting(true);
     const totalScore = Object.values(criteriaScores).reduce((sum, s) => sum + s, 0);
     
+    // We pass an empty ID here; App.tsx will resolve the correct UUID or let Supabase generate it
     const newScore: Score = {
-      id: `${judge.id}_${participantId}`,
+      id: '', 
       judgeId: judge.id,
       participantId,
       eventId: selectedEventId,

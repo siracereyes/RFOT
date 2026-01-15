@@ -125,18 +125,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSessionChange = useCallback(async (session: any) => {
-    if (session) {
-      await resolveProfile(session);
-      await fetchAllData();
-    } else {
-      setCurrentUser(null);
-      setUsers([]);
-      setEvents([]);
-    }
-    setAuthLoading(false);
-  }, [fetchAllData]);
-
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
@@ -245,28 +233,44 @@ const App: React.FC = () => {
   };
 
   const submitScore = async (s: Score) => {
-    const { data, error } = await supabase.from('scores').upsert({
-      id: s.id,
+    // 1. Check if a record already exists for this judge/participant combo
+    const { data: existing } = await supabase
+      .from('scores')
+      .select('id')
+      .eq('judge_id', s.judgeId)
+      .eq('participant_id', s.participantId)
+      .maybeSingle();
+
+    const payload: any = {
       judge_id: s.judgeId,
       participant_id: s.participantId,
       event_id: s.eventId,
       criteria_scores: s.criteriaScores,
       total_score: s.totalScore,
       critique: s.critique
-    }).select();
+    };
+
+    // If it exists, use that UUID to update. If not, don't send an ID so Supabase generates a new UUID.
+    if (existing?.id) {
+      payload.id = existing.id;
+    }
+
+    const { data, error } = await supabase
+      .from('scores')
+      .upsert(payload)
+      .select();
 
     if (error) {
       console.error("Score submission error:", error);
       throw error;
     }
 
-    // Optimistically update local state so the judge sees the "Submitted" badge immediately
+    const savedScore = mapScore(data[0]);
+
+    // Optimistically update local state
     setScores(prev => {
-      const exists = prev.some(score => score.id === s.id);
-      if (exists) {
-        return prev.map(score => score.id === s.id ? s : score);
-      }
-      return [...prev, s];
+      const filtered = prev.filter(score => score.id !== savedScore.id);
+      return [...filtered, savedScore];
     });
 
     return data;
