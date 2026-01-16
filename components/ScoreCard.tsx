@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Criterion, Participant, EventType, Round } from '../types';
-import { Save, User as UserIcon, MessageSquareQuote, Info, Hash, AlertTriangle, CheckCircle, BarChart3, Loader2, Lock, Check, X, ShieldCheck, Zap } from 'lucide-react';
+import { Save, User as UserIcon, MessageSquareQuote, Info, Hash, AlertTriangle, CheckCircle, BarChart3, Loader2, Lock, Check, X, ShieldCheck, Zap, Edit3 } from 'lucide-react';
 
 interface ScoreCardProps {
   participant: Participant;
@@ -50,20 +50,14 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
   const roundGroups = useMemo(() => {
     if (!isQuizBee) return [];
     const groups: { name: string; rounds: Round[]; color: string; bgColor: string }[] = [
-      { name: 'Easy Tier', rounds: [], color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
-      { name: 'Moderate Tier', rounds: [], color: 'text-blue-600', bgColor: 'bg-blue-50' },
-      { name: 'Difficult Tier', rounds: [], color: 'text-purple-600', bgColor: 'bg-purple-50' },
-      { name: 'Clinchers / Tie-Breakers', rounds: [], color: 'text-amber-600', bgColor: 'bg-amber-50' },
-      { name: 'Other Rounds', rounds: [], color: 'text-slate-600', bgColor: 'bg-slate-50' }
+      { name: 'Primary Tiers', rounds: [], color: 'text-blue-600', bgColor: 'bg-blue-50' },
+      { name: 'Tie-Breakers', rounds: [], color: 'text-amber-600', bgColor: 'bg-amber-50' }
     ];
 
     (rounds || []).forEach(r => {
       const name = r.name.toLowerCase();
-      if (r.isTieBreaker || name.includes('clincher') || name.includes('tie')) groups[3].rounds.push(r);
-      else if (name.includes('easy')) groups[0].rounds.push(r);
-      else if (name.includes('moderate') || name.includes('medium') || name.includes('average')) groups[1].rounds.push(r);
-      else if (name.includes('diff') || name.includes('hard')) groups[2].rounds.push(r);
-      else groups[4].rounds.push(r);
+      if (r.isTieBreaker || name.includes('clincher') || name.includes('tie')) groups[1].rounds.push(r);
+      else groups[0].rounds.push(r);
     });
 
     return groups.filter(g => g.rounds.length > 0);
@@ -75,22 +69,19 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
 
   const total = Math.max(0, rawTotal - deductions);
 
-  const handleScoreChange = (id: string, value: string | number, max: number) => {
+  const handleScoreChange = (id: string, value: string | number, max: number, ignoreMax: boolean = false) => {
     if (isLocked) return;
     let num = typeof value === 'string' ? parseFloat(value) : (value as number);
     if (isNaN(num)) num = 0;
-    if (num > max) num = max;
+    
+    // For Quiz Bee, the user requested removing the max number constraint
+    if (!ignoreMax && num > max) num = max;
     if (num < 0) num = 0;
     
     setScores(prev => ({
       ...prev,
       [id]: num
     }));
-  };
-
-  const handleToggleCorrect = (r: Round) => {
-    const current = Number(scores[r.id]) || 0;
-    handleScoreChange(r.id, current === r.points ? 0 : r.points, 1000);
   };
 
   const handleSaveInternal = async () => {
@@ -148,57 +139,51 @@ const ScoreCard: React.FC<ScoreCardProps> = ({
       <div className="p-6 md:p-10 space-y-12 bg-white">
         {isQuizBee ? (
           <div className="space-y-12">
-            {roundGroups.map((group, gIdx) => (
+            {roundGroups.map((group) => (
               <div key={group.name} className="space-y-6">
                 <div className="flex items-center justify-between border-l-4 border-slate-200 pl-4">
                   <div>
                     <h5 className={`text-xs md:text-sm font-black uppercase tracking-[0.2em] ${group.color}`}>{group.name}</h5>
                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-                      Progress: {group.rounds.filter(r => (scores[r.id] || 0) > 0).length} / {group.rounds.length} Won
+                      Enter total accumulated points per level
                     </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xl md:text-2xl font-black text-slate-900 font-header">
-                      {group.rounds.reduce((sum, r) => sum + (Number(scores[r.id]) || 0), 0)}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase ml-2">Tier Pts</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {group.rounds.map((r) => {
-                    const isCorrect = (Number(scores[r.id]) || 0) === r.points;
-                    const isPartial = (Number(scores[r.id]) || 0) > 0 && (Number(scores[r.id]) || 0) < r.points;
-                    
-                    return (
-                      <div 
-                        key={r.id} 
-                        onClick={() => !isLocked && handleToggleCorrect(r)}
-                        className={`p-4 rounded-[1.5rem] border transition-all cursor-pointer flex items-center justify-between gap-4 group/item ${
-                          isCorrect 
-                            ? 'bg-emerald-50 border-emerald-200 shadow-emerald-100 shadow-md' 
-                            : isPartial 
-                              ? 'bg-amber-50 border-amber-200'
-                              : 'bg-slate-50 border-slate-100 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <p className={`text-xs font-black truncate uppercase tracking-tight ${isCorrect ? 'text-emerald-700' : isPartial ? 'text-amber-700' : 'text-slate-600'}`}>
-                            {r.name}
-                          </p>
-                          <p className={`text-[8px] font-bold uppercase tracking-widest mt-1 ${isCorrect ? 'text-emerald-600' : 'text-slate-400'}`}>Value: {r.points}pt</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {group.rounds.map((r) => (
+                    <div 
+                      key={r.id} 
+                      className={`p-6 rounded-[2rem] border transition-all flex flex-col gap-4 ${
+                        (scores[r.id] || 0) > 0 
+                          ? 'bg-blue-50/50 border-blue-100 shadow-sm' 
+                          : 'bg-slate-50 border-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-widest text-slate-900">{r.name}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Accumulated Score</p>
                         </div>
-                        
-                        <div className="flex items-center gap-2">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                            isCorrect ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'bg-white border border-slate-200 text-slate-300'
-                          }`}>
-                            {isCorrect ? <Check size={20} /> : <X size={20} />}
-                          </div>
+                        <div className="p-2 bg-white rounded-lg border border-slate-100 shadow-sm text-blue-600">
+                          <Edit3 size={14} />
                         </div>
                       </div>
-                    );
-                  })}
+                      
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          disabled={isLocked || isSaving}
+                          value={scores[r.id] ?? ''}
+                          onChange={(e) => handleScoreChange(r.id, e.target.value, 1000, true)}
+                          placeholder="0"
+                          className={`w-full bg-white border border-slate-200 rounded-2xl px-6 py-5 text-4xl font-black outline-none transition-all placeholder:text-slate-200 ${
+                            isLocked ? 'text-slate-400 bg-slate-50/50' : 'text-blue-600 focus:border-blue-500 shadow-inner'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

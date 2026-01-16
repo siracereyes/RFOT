@@ -87,12 +87,14 @@ const App: React.FC = () => {
       return;
     }
     try {
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authSession.user.id)
         .maybeSingle();
       
+      if (profileError) throw profileError;
+
       if (profile) {
         const mapped = mapUser(profile);
         if (!mapped.email) mapped.email = authSession.user.email || '';
@@ -121,40 +123,62 @@ const App: React.FC = () => {
       }
     } catch (err) {
       console.error("Profile resolution error:", err);
+      // Even if profile fails, we shouldn't hang the app
+      setCurrentUser(null);
     }
   };
 
   useEffect(() => {
+    // Only run initialization once
     if (initRef.current) return;
     initRef.current = true;
+
     const initialize = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) await resolveProfile(session);
-      await fetchAllData();
-      setAuthLoading(false);
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        
+        if (session) {
+          await resolveProfile(session);
+        }
+        await fetchAllData();
+      } catch (err) {
+        console.error("Initialization failed:", err);
+      } finally {
+        // Guaranteed to stop the loading screen
+        setAuthLoading(false);
+      }
     };
+
     initialize();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        // Don't restart loading if we're already initialized and just receiving a state update
         await resolveProfile(session);
         await fetchAllData();
-        setAuthLoading(false);
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setUsers([]);
         setEvents([]);
-        setAuthLoading(false);
       }
     });
-    return () => { subscription.unsubscribe(); };
+
+    return () => { 
+      subscription.unsubscribe(); 
+    };
   }, [fetchAllData]);
 
   const handleLogout = async () => {
     setAuthLoading(true);
-    await supabase.auth.signOut();
-    setCurrentUser(null);
-    setAuthLoading(false);
+    try {
+      await supabase.auth.signOut();
+      setCurrentUser(null);
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   const [loginCreds, setLoginCreds] = useState({ email: '', password: '' });
@@ -184,7 +208,10 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-4">
         <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading NCR Portal Core...</p>
+        <div className="flex flex-col items-center gap-1">
+          <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-[10px]">Authenticating Session...</p>
+          <p className="text-slate-300 font-bold uppercase tracking-widest text-[8px]">NCR Portal RFOT 2026</p>
+        </div>
       </div>
     );
   }
