@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Users, Plus, Lock, Unlock, Award, X, Edit3, Trash2, RefreshCw, ChevronRight } from 'lucide-react';
+import { Trophy, Users, Plus, Lock, Unlock, Award, X, Edit3, Trash2, RefreshCw, ChevronRight, AlertTriangle, Loader2 } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score, Round } from '../types';
 import { SDO_LIST } from '../constants';
@@ -15,6 +15,7 @@ interface AdminDashboardProps {
   onToggleRegistration: (enabled: boolean) => void;
   onAddEvent: (e: Event) => void;
   onUpdateEvent: (e: Event) => void;
+  onDeleteEvent: (id: string) => void;
   onAddParticipant: (p: Participant) => void;
   onUpdateParticipant: (p: Participant) => void;
   onDeleteParticipant: (id: string) => void;
@@ -30,6 +31,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   scores, 
   onAddEvent, 
   onUpdateEvent, 
+  onDeleteEvent,
   onAddParticipant, 
   onUpdateParticipant, 
   onDeleteParticipant, 
@@ -44,6 +46,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showJudgeModal, setShowJudgeModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Deletion Confirmation States
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteInput, setDeleteInput] = useState('');
 
   // Event Form states
   const [eventName, setEventName] = useState('');
@@ -64,6 +70,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const judges = useMemo(() => 
     users.filter(u => u.role === UserRole.JUDGE || u.role?.toString().toUpperCase() === 'JUDGE'),
     [users]
+  );
+
+  const eventToDelete = useMemo(() => 
+    events.find(e => e.id === deleteConfirmId),
+    [events, deleteConfirmId]
   );
 
   useEffect(() => {
@@ -187,6 +198,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     resetForm();
   };
 
+  const handleDeleteConfirmed = () => {
+    if (!eventToDelete || deleteInput !== eventToDelete.name) return;
+    onDeleteEvent(eventToDelete.id);
+    setDeleteConfirmId(null);
+    setDeleteInput('');
+  };
+
   const resetForm = () => { 
     setShowWizard(false); 
     setEditingEventId(null); 
@@ -250,7 +268,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => setEditingEventId(event.id)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Edit3 size={18}/></button>
-                  <button className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18}/></button>
+                  <button onClick={() => setDeleteConfirmId(event.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={18}/></button>
                 </div>
               </div>
 
@@ -304,6 +322,58 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button onClick={() => onRemoveJudge(judge.id)} className="text-red-300 hover:text-red-500"><Trash2 size={18}/></button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Event Deletion Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xl" onClick={() => setDeleteConfirmId(null)} />
+          <div className="bg-white rounded-[2.5rem] w-full max-w-md p-10 relative shadow-2xl space-y-8 animate-in zoom-in-95 duration-300">
+            <div className="flex flex-col items-center text-center space-y-4">
+               <div className="w-20 h-20 rounded-3xl bg-red-50 text-red-600 flex items-center justify-center shadow-inner">
+                  <AlertTriangle size={40} />
+               </div>
+               <div className="space-y-1">
+                  <h3 className="text-2xl font-black font-header text-slate-900 uppercase">Critical Purge</h3>
+                  <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Permanent System Wipe • RFOT Records</p>
+               </div>
+               <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                 Warning: Deleting <strong>{eventToDelete?.name}</strong> will permanently remove <strong>all assigned judges</strong>, participants, and scoring data from the regional database. This action is irreversible.
+               </p>
+            </div>
+
+            <div className="space-y-4">
+               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block ml-4">Type the contest name to confirm:</label>
+               <input 
+                 type="text"
+                 placeholder={eventToDelete?.name}
+                 value={deleteInput}
+                 onChange={(e) => setDeleteInput(e.target.value)}
+                 className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-bold text-sm outline-none focus:border-red-500 transition-all text-center"
+               />
+            </div>
+
+            <div className="flex flex-col gap-3">
+               <button 
+                 disabled={deleteInput !== eventToDelete?.name}
+                 onClick={handleDeleteConfirmed}
+                 className={`w-full py-5 rounded-[1.5rem] font-black uppercase tracking-widest text-[11px] transition-all flex items-center justify-center gap-3 ${
+                   deleteInput === eventToDelete?.name 
+                     ? 'bg-red-600 hover:bg-red-700 text-white shadow-xl shadow-red-200' 
+                     : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                 }`}
+               >
+                 <Trash2 size={16} /> Wipe Contest & Judges
+               </button>
+               <button 
+                 onClick={() => { setDeleteConfirmId(null); setDeleteInput(''); }}
+                 className="w-full py-5 text-slate-400 hover:text-slate-600 font-black uppercase tracking-widest text-[10px]"
+               >
+                 Cancel
+               </button>
+            </div>
           </div>
         </div>
       )}

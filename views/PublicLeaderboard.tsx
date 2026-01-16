@@ -71,7 +71,8 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
       })
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
-        return b.tieBreakerVal - a.tieBreakerVal;
+        if (b.tieBreakerVal !== a.tieBreakerVal) return b.tieBreakerVal - a.tieBreakerVal;
+        return a.name.localeCompare(b.name); // Stable sort for participants
       })
       .map((r, i, arr) => {
         if (i > 0 && r.score === arr[i-1].score && r.tieBreakerVal !== arr[i-1].tieBreakerVal) {
@@ -118,7 +119,12 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ events, participa
       const eventRanks = Object.values(matrix[district]);
       const meanRank = eventRanks.reduce((sum, r) => sum + r, 0) / Math.max(1, events.length);
       return { district, eventRanks: matrix[district], meanRank: Number(meanRank.toFixed(2)) };
-    }).sort((a, b) => a.meanRank - b.meanRank);
+    }).sort((a, b) => {
+      // Primary: Sort by Mean Rank (Ascending)
+      if (a.meanRank !== b.meanRank) return a.meanRank - b.meanRank;
+      // Secondary: Stable alphabetical sort (ensures Valenzuela is at the bottom when ranks are tied)
+      return a.district.localeCompare(b.district);
+    });
   }, [events, scores, participants]);
 
   return (

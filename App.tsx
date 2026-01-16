@@ -365,6 +365,31 @@ const App: React.FC = () => {
             }} onUpdateEvent={async (e) => {
               const { error } = await supabase.from('events').update({ name: e.name, is_locked: e.isLocked, criteria: e.criteria, rounds: e.rounds }).eq('id', e.id);
               if (!error) setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev));
+            }} onDeleteEvent={async (id) => {
+              // Perform cascading deletion manually for consistency
+              setDataLoading(true);
+              try {
+                // 1. Purge scores associated with this event
+                await supabase.from('scores').delete().eq('event_id', id);
+                // 2. Purge participants associated with this event
+                await supabase.from('participants').delete().eq('event_id', id);
+                // 3. Purge assigned judges (profiles) specifically associated with this event
+                await supabase.from('profiles').delete().eq('assigned_event_id', id);
+                // 4. Finally, purge the event itself
+                const { error } = await supabase.from('events').delete().eq('id', id);
+                
+                if (!error) {
+                  setEvents(prev => prev.filter(e => e.id !== id));
+                  setParticipants(prev => prev.filter(p => p.eventId !== id));
+                  setScores(prev => prev.filter(s => s.eventId !== id));
+                  setUsers(prev => prev.filter(u => u.assignedEventId !== id));
+                }
+              } catch (err) {
+                console.error("Purge failure", err);
+                alert("Failed to complete full system purge. Please check connectivity.");
+              } finally {
+                setDataLoading(false);
+              }
             }} onAddParticipant={async (p) => {
               const { data, error } = await supabase.from('participants').insert([{ name: p.name, district: p.district, event_id: p.eventId }]).select();
               if (!error && data) setParticipants(prev => [...prev, mapParticipant(data[0])]);
