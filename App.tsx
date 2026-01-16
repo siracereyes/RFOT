@@ -6,7 +6,7 @@ import Layout from './components/Layout';
 import AdminDashboard from './views/AdminDashboard';
 import JudgeDashboard from './views/JudgeDashboard';
 import PublicLeaderboard from './views/PublicLeaderboard';
-import { Loader2, ShieldCheck, Mail, Key, Sparkles } from 'lucide-react';
+import { Loader2, ShieldCheck, Mail, Key, Sparkles, RefreshCw } from 'lucide-react';
 import { supabase } from './supabase';
 
 const App: React.FC = () => {
@@ -60,16 +60,17 @@ const App: React.FC = () => {
   const fetchAllData = useCallback(async () => {
     setDataLoading(true);
     try {
-      // Use individual try-catch for data points so one failure doesn't block everything
       const fetchEvents = supabase.from('events').select('*').then(res => res.data);
       const fetchParticipants = supabase.from('participants').select('*').then(res => res.data);
       const fetchScores = supabase.from('scores').select('*').then(res => res.data);
       const fetchProfiles = supabase.from('profiles').select('*').then(res => res.data);
       const fetchSettings = supabase.from('settings').select('*').eq('key', 'admin_registration_enabled').maybeSingle().then(res => res.data);
 
-      const [evData, partData, scoreData, profileData, settingsData] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         fetchEvents, fetchParticipants, fetchScores, fetchProfiles, fetchSettings
       ]);
+
+      const [evData, partData, scoreData, profileData, settingsData] = results;
 
       if (evData.status === 'fulfilled' && evData.value) setEvents(evData.value.map(mapEvent));
       if (partData.status === 'fulfilled' && partData.value) setParticipants(partData.value.map(mapParticipant));
@@ -117,14 +118,13 @@ const App: React.FC = () => {
         
         setCurrentUser(fallbackUser);
         
-        // Background upsert, don't await to avoid blocking UI
         supabase.from('profiles').upsert([{
           id: authSession.user.id,
           name: fallbackUser.name,
           role: fallbackUser.role,
           assigned_event_id: fallbackUser.assignedEventId
         }]).then(({ error }) => {
-          if (error) console.error("Initial profile creation failed:", error);
+          if (error) console.error("Profile sync failed:", error);
         });
 
         return fallbackUser;
@@ -140,30 +140,22 @@ const App: React.FC = () => {
     if (initRef.current) return;
     initRef.current = true;
 
-    // Fail-safe timeout: ensure we stop loading no matter what happens
-    const failSafeTimeout = setTimeout(() => {
+    // Fail-safe to ensure the app is never stuck on a black screen
+    const failSafe = setTimeout(() => {
       setAuthLoading(false);
-    }, 5000);
+    }, 4500);
 
     const initialize = async () => {
       try {
-        // Step 1: Just get the session first
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        
+        const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-          // Step 2: Resolve profile but wrap in a timeout to ensure it doesn't hang
-          await Promise.race([
-            resolveProfile(session),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Profile timeout")), 3000))
-          ]).catch(e => console.warn("Profile resolution too slow, proceeding with session only"));
+          await resolveProfile(session);
         }
       } catch (err) {
-        console.error("Initialization failed:", err);
+        console.error("Initialization error:", err);
       } finally {
         setAuthLoading(false);
-        clearTimeout(failSafeTimeout);
-        // Step 3: Fetch data AFTER auth screen is decided
+        clearTimeout(failSafe);
         fetchAllData();
       }
     };
@@ -172,19 +164,25 @@ const App: React.FC = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-        await resolveProfile(session);
-        fetchAllData();
+        setAuthLoading(true);
+        try {
+          await resolveProfile(session);
+          await fetchAllData();
+        } finally {
+          setAuthLoading(false);
+        }
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setUsers([]);
         setEvents([]);
         setScores([]);
+        setAuthLoading(false);
       }
     });
 
     return () => { 
-      subscription.unsubscribe(); 
-      clearTimeout(failSafeTimeout);
+      subscription.unsubscribe();
+      clearTimeout(failSafe);
     };
   }, [fetchAllData]);
 
@@ -192,10 +190,8 @@ const App: React.FC = () => {
     setAuthLoading(true);
     try {
       await supabase.auth.signOut();
-      setCurrentUser(null);
     } catch (err) {
-      console.error("Logout failed:", err);
-    } finally {
+      console.error("Sign out error:", err);
       setAuthLoading(false);
     }
   };
@@ -210,11 +206,7 @@ const App: React.FC = () => {
       assigned_event_id: u.assigned_event_id
     }]).select();
     
-    if (error) {
-      console.error("Database Error (Judge Profile):", error);
-      throw error;
-    }
-
+    if (error) throw error;
     if (data) {
       const newUser = mapUser(data[0]);
       newUser.email = u.email;
@@ -225,12 +217,23 @@ const App: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-4">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <div className="flex flex-col items-center gap-1">
-          <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-[10px]">Authenticating Session...</p>
-          <p className="text-slate-300 font-bold uppercase tracking-widest text-[8px]">NCR Portal RFOT 2026</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-6">
+        <div className="relative">
+          <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full"></div>
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin relative z-10" />
         </div>
+        <div className="flex flex-col items-center gap-2 text-center">
+          <p className="text-slate-900 font-black uppercase tracking-[0.25em] text-[11px]">Authorized Entry Pending</p>
+          <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px] animate-pulse">Establishing Secure Uplink • RFOT 2026</p>
+        </div>
+        
+        {/* Fail-safe manual bypass */}
+        <button 
+          onClick={() => setAuthLoading(false)}
+          className="mt-8 px-6 py-2 border border-slate-200 rounded-full text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all"
+        >
+          Force Bypass
+        </button>
       </div>
     );
   }
@@ -240,26 +243,26 @@ const App: React.FC = () => {
       {!currentUser ? (
         <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 relative overflow-hidden">
           <div 
-            className="absolute inset-0 z-0 bg-center bg-cover bg-no-repeat opacity-[0.3]"
+            className="absolute inset-0 z-0 bg-center bg-cover bg-no-repeat opacity-[0.25] transition-opacity duration-1000"
             style={{ backgroundImage: "url('https://i.ibb.co/rf28pYjw/rspc2.png')" }}
           ></div>
-          <div className="absolute inset-0 z-0 bg-gradient-to-b from-slate-900/60 via-slate-900/20 to-slate-950/80"></div>
+          <div className="absolute inset-0 z-0 bg-gradient-to-b from-slate-900/70 via-slate-900/30 to-slate-950/90"></div>
 
-          <div className="bg-white/30 backdrop-blur-[40px] p-8 md:p-12 rounded-[3.5rem] w-full max-w-md border border-white/20 shadow-3xl space-y-10 relative z-10 animate-in fade-in zoom-in duration-700">
+          <div className="bg-white/40 backdrop-blur-[45px] p-8 md:p-12 rounded-[3.5rem] w-full max-w-md border border-white/20 shadow-3xl space-y-10 relative z-10 animate-in fade-in zoom-in duration-700">
             <div className="text-center space-y-4">
               <div className="flex justify-center mb-6">
                 <div className="relative group">
-                   <div className="absolute inset-0 bg-blue-500/30 rounded-full blur-3xl group-hover:bg-blue-500/40 transition-all duration-700"></div>
+                   <div className="absolute inset-0 bg-blue-500/40 rounded-full blur-3xl group-hover:bg-blue-500/50 transition-all duration-700"></div>
                    <img 
                     src="https://i.ibb.co/rf28pYjw/rspc2.png" 
                     alt="RFOT Logo" 
-                    className="w-32 h-32 md:w-40 md:h-40 object-contain relative z-10 animate-float drop-shadow-2xl rounded-[2rem]"
+                    className="w-32 h-32 md:w-40 md:h-40 object-contain relative z-10 animate-float drop-shadow-2xl rounded-[2.5rem]"
                   />
                 </div>
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-black font-header tracking-tight text-slate-900 leading-none">RFOT <span className="text-[#FFD700]">2026</span></h1>
-                <p className="text-slate-900 mt-2 font-black tracking-[0.1em] uppercase text-[10px] md:text-xs">National Capital Region Portal</p>
+                <h1 className="text-3xl md:text-4xl font-black font-header tracking-tight text-slate-900 leading-none">NCR <span className="text-blue-700">PORTAL</span></h1>
+                <p className="text-slate-800 mt-2 font-black tracking-[0.15em] uppercase text-[10px] md:text-xs">Regional Festival of Talents 2026</p>
               </div>
             </div>
 
@@ -268,7 +271,7 @@ const App: React.FC = () => {
               setAuthLoading(true);
               try {
                 const { error } = isRegistering 
-                  ? await supabase.auth.signUp({ email: loginCreds.email, password: loginCreds.password, options: { data: { role: UserRole.SUPER_ADMIN, name: 'Main Admin' } } })
+                  ? await supabase.auth.signUp({ email: loginCreds.email, password: loginCreds.password, options: { data: { role: UserRole.SUPER_ADMIN, name: 'NCR Admin' } } })
                   : await supabase.auth.signInWithPassword({ email: loginCreds.email, password: loginCreds.password });
                 if (error) throw error;
               } catch (err: any) { 
@@ -277,14 +280,14 @@ const App: React.FC = () => {
               }
             }} className="space-y-5">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-900 ml-4 drop-shadow-sm">Credential Access</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-900 ml-4">Credential Identity</label>
                 <div className="relative">
-                  <Mail className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-800" size={18} />
+                  <Mail className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-700" size={18} />
                   <input 
                     type="email" 
                     required 
                     placeholder="Email Address"
-                    className="w-full bg-white/40 border border-white/50 rounded-[2rem] pl-14 pr-6 py-5 outline-none focus:border-blue-600 focus:bg-white/80 focus:ring-4 focus:ring-blue-600/10 transition-all font-bold text-slate-900 shadow-sm placeholder:text-slate-600" 
+                    className="w-full bg-white/50 border border-white/60 rounded-[2rem] pl-14 pr-6 py-5 outline-none focus:border-blue-600 focus:bg-white/90 focus:ring-4 focus:ring-blue-600/10 transition-all font-bold text-slate-900 shadow-sm" 
                     value={loginCreds.email} 
                     onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} 
                   />
@@ -292,14 +295,14 @@ const App: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-900 ml-4 drop-shadow-sm">Secure Key</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-900 ml-4">Access Token</label>
                 <div className="relative">
-                  <Key className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-800" size={18} />
+                  <Key className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-700" size={18} />
                   <input 
                     type="password" 
                     required 
-                    placeholder="Enter Password"
-                    className="w-full bg-white/40 border border-white/50 rounded-[2rem] pl-14 pr-6 py-5 outline-none focus:border-blue-600 focus:bg-white/80 focus:ring-4 focus:ring-blue-600/10 transition-all font-bold text-slate-900 shadow-sm placeholder:text-slate-600" 
+                    placeholder="Enter Security Key"
+                    className="w-full bg-white/50 border border-white/60 rounded-[2rem] pl-14 pr-6 py-5 outline-none focus:border-blue-600 focus:bg-white/90 focus:ring-4 focus:ring-blue-600/10 transition-all font-bold text-slate-900 shadow-sm" 
                     value={loginCreds.password} 
                     onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} 
                   />
@@ -308,30 +311,32 @@ const App: React.FC = () => {
 
               <button type="submit" className="w-full py-6 bg-blue-700 hover:bg-blue-800 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-900/40 flex items-center justify-center gap-3 active:scale-[0.98]">
                 {isRegistering ? <Sparkles size={18} /> : <ShieldCheck size={18} />}
-                {isRegistering ? 'Initialize Platform' : 'Secure Authorization'}
+                {isRegistering ? 'Initialize Environment' : 'Verify Authorization'}
               </button>
             </form>
 
             <div className="flex items-center justify-center gap-4">
               <div className="h-px flex-1 bg-black/10"></div>
               {registrationEnabled && (
-                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[9px] font-black uppercase tracking-widest text-slate-900 hover:text-blue-800 transition-colors">
-                  {isRegistering ? 'Back to Login' : 'System Setup'}
+                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[9px] font-black uppercase tracking-widest text-slate-900 hover:text-blue-900 transition-colors">
+                  {isRegistering ? 'Cancel' : 'System Setup'}
                 </button>
               )}
               <div className="h-px flex-1 bg-black/10"></div>
             </div>
 
-            <div className="text-center">
-               <p className="text-[8px] font-bold text-slate-900/80 uppercase tracking-widest italic">Protected by Regional Data Integrity Service</p>
+            <div className="text-center pt-4">
+               <div className="flex items-center justify-center gap-2 text-slate-900/60 uppercase font-black text-[8px] tracking-[0.2em]">
+                 <RefreshCw size={10} /> Live Data Sync Active
+               </div>
             </div>
           </div>
         </div>
       ) : (
         <Layout user={currentUser} onLogout={handleLogout}>
           {dataLoading && (
-            <div className="fixed top-0 left-0 w-full h-1 bg-blue-100 z-[100]">
-              <div className="h-full bg-blue-600 animate-[loading_2s_ease-in-out_infinite] w-1/3"></div>
+            <div className="fixed top-0 left-0 w-full h-1 bg-blue-50 z-[100] overflow-hidden">
+              <div className="h-full bg-blue-600 animate-[loading_1.5s_ease-in-out_infinite] w-1/3 shadow-[0_0_10px_rgba(37,99,235,0.5)]"></div>
             </div>
           )}
           <Routes>
@@ -374,7 +379,7 @@ const App: React.FC = () => {
           </Routes>
         </Layout>
       )}
-      <style>{`@keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }`}</style>
+      <style>{`@keyframes loading { 0% { transform: translateX(-150%); } 100% { transform: translateX(350%); } }`}</style>
     </Router>
   );
 };
