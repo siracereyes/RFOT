@@ -60,19 +60,22 @@ const App: React.FC = () => {
   const fetchAllData = useCallback(async () => {
     setDataLoading(true);
     try {
-      const [eventsRes, participantsRes, scoresRes, profilesRes, settingsRes] = await Promise.all([
-        supabase.from('events').select('*'),
-        supabase.from('participants').select('*'),
-        supabase.from('scores').select('*'),
-        supabase.from('profiles').select('*'),
-        supabase.from('settings').select('*').eq('key', 'admin_registration_enabled').maybeSingle()
+      // Use individual try-catch for data points so one failure doesn't block everything
+      const fetchEvents = supabase.from('events').select('*').then(res => res.data);
+      const fetchParticipants = supabase.from('participants').select('*').then(res => res.data);
+      const fetchScores = supabase.from('scores').select('*').then(res => res.data);
+      const fetchProfiles = supabase.from('profiles').select('*').then(res => res.data);
+      const fetchSettings = supabase.from('settings').select('*').eq('key', 'admin_registration_enabled').maybeSingle().then(res => res.data);
+
+      const [evData, partData, scoreData, profileData, settingsData] = await Promise.allSettled([
+        fetchEvents, fetchParticipants, fetchScores, fetchProfiles, fetchSettings
       ]);
 
-      if (eventsRes.data) setEvents(eventsRes.data.map(mapEvent));
-      if (participantsRes.data) setParticipants(participantsRes.data.map(mapParticipant));
-      if (scoresRes.data) setScores(scoresRes.data.map(mapScore));
-      if (profilesRes.data) setUsers(profilesRes.data.map(mapUser));
-      if (settingsRes.data) setRegistrationEnabled(settingsRes.data.value === 'true');
+      if (evData.status === 'fulfilled' && evData.value) setEvents(evData.value.map(mapEvent));
+      if (partData.status === 'fulfilled' && partData.value) setParticipants(partData.value.map(mapParticipant));
+      if (scoreData.status === 'fulfilled' && scoreData.value) setScores(scoreData.value.map(mapScore));
+      if (profileData.status === 'fulfilled' && profileData.value) setUsers(profileData.value.map(mapUser));
+      if (settingsData.status === 'fulfilled' && settingsData.value) setRegistrationEnabled(settingsData.value.value === 'true');
       
     } catch (e) {
       console.error("Data fetch error:", e);
@@ -84,7 +87,7 @@ const App: React.FC = () => {
   const resolveProfile = async (authSession: any) => {
     if (!authSession?.user) {
       setCurrentUser(null);
-      return;
+      return null;
     }
     try {
       const { data: profile, error: profileError } = await supabase
@@ -99,6 +102,7 @@ const App: React.FC = () => {
         const mapped = mapUser(profile);
         if (!mapped.email) mapped.email = authSession.user.email || '';
         setCurrentUser(mapped);
+        return mapped;
       } else {
         const meta = authSession.user.user_metadata;
         const assignedRole = (meta?.role || (isRegistering ? UserRole.SUPER_ADMIN : UserRole.JUDGE)).toUpperCase();
@@ -113,40 +117,54 @@ const App: React.FC = () => {
         
         setCurrentUser(fallbackUser);
         
-        const { error } = await supabase.from('profiles').upsert([{
+        // Background upsert, don't await to avoid blocking UI
+        supabase.from('profiles').upsert([{
           id: authSession.user.id,
           name: fallbackUser.name,
           role: fallbackUser.role,
           assigned_event_id: fallbackUser.assignedEventId
-        }]);
-        if (error) console.error("Initial profile creation failed:", error);
+        }]).then(({ error }) => {
+          if (error) console.error("Initial profile creation failed:", error);
+        });
+
+        return fallbackUser;
       }
     } catch (err) {
       console.error("Profile resolution error:", err);
-      // Even if profile fails, we shouldn't hang the app
       setCurrentUser(null);
+      return null;
     }
   };
 
   useEffect(() => {
-    // Only run initialization once
     if (initRef.current) return;
     initRef.current = true;
 
+    // Fail-safe timeout: ensure we stop loading no matter what happens
+    const failSafeTimeout = setTimeout(() => {
+      setAuthLoading(false);
+    }, 5000);
+
     const initialize = async () => {
       try {
+        // Step 1: Just get the session first
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
         
         if (session) {
-          await resolveProfile(session);
+          // Step 2: Resolve profile but wrap in a timeout to ensure it doesn't hang
+          await Promise.race([
+            resolveProfile(session),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Profile timeout")), 3000))
+          ]).catch(e => console.warn("Profile resolution too slow, proceeding with session only"));
         }
-        await fetchAllData();
       } catch (err) {
         console.error("Initialization failed:", err);
       } finally {
-        // Guaranteed to stop the loading screen
         setAuthLoading(false);
+        clearTimeout(failSafeTimeout);
+        // Step 3: Fetch data AFTER auth screen is decided
+        fetchAllData();
       }
     };
 
@@ -154,18 +172,19 @@ const App: React.FC = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-        // Don't restart loading if we're already initialized and just receiving a state update
         await resolveProfile(session);
-        await fetchAllData();
+        fetchAllData();
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setUsers([]);
         setEvents([]);
+        setScores([]);
       }
     });
 
     return () => { 
       subscription.unsubscribe(); 
+      clearTimeout(failSafeTimeout);
     };
   }, [fetchAllData]);
 
@@ -220,16 +239,12 @@ const App: React.FC = () => {
     <Router>
       {!currentUser ? (
         <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 relative overflow-hidden">
-          {/* Main Background Image with 70% Transparency (30% Opacity) */}
           <div 
             className="absolute inset-0 z-0 bg-center bg-cover bg-no-repeat opacity-[0.3]"
             style={{ backgroundImage: "url('https://i.ibb.co/rf28pYjw/rspc2.png')" }}
           ></div>
-          
-          {/* Overlay gradient to ensure text readability */}
           <div className="absolute inset-0 z-0 bg-gradient-to-b from-slate-900/60 via-slate-900/20 to-slate-950/80"></div>
 
-          {/* Login Card with 70% Transparency (bg-white/30) */}
           <div className="bg-white/30 backdrop-blur-[40px] p-8 md:p-12 rounded-[3.5rem] w-full max-w-md border border-white/20 shadow-3xl space-y-10 relative z-10 animate-in fade-in zoom-in duration-700">
             <div className="text-center space-y-4">
               <div className="flex justify-center mb-6">
