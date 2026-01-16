@@ -250,28 +250,28 @@ const App: React.FC = () => {
   return (
     <Router>
       {!currentUser ? (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617] relative overflow-hidden">
+        <div className="min-h-screen flex items-center justify-center p-4 bg-[#020617] relative overflow-hidden">
           <div 
             className="absolute inset-0 z-0 bg-center bg-cover bg-no-repeat opacity-[0.15] scale-105"
             style={{ backgroundImage: "url('https://i.ibb.co/rf28pYjw/rspc2.png')" }}
           ></div>
           <div className="absolute inset-0 z-0 bg-gradient-to-tr from-slate-950 via-slate-950/40 to-slate-950"></div>
 
-          <div className="bg-white/45 backdrop-blur-[55px] p-8 md:p-14 rounded-[3.5rem] w-full max-w-md border border-white/20 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.6)] space-y-12 relative z-10 animate-in fade-in zoom-in-95 duration-1000">
-            <div className="text-center space-y-6">
-              <div className="flex justify-center mb-6">
+          <div className="bg-white/45 backdrop-blur-[55px] p-6 md:p-10 rounded-[2.5rem] w-full max-w-md border border-white/20 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.6)] space-y-6 relative z-10 animate-in fade-in zoom-in-95 duration-1000 max-h-[95vh] overflow-y-auto no-scrollbar">
+            <div className="text-center space-y-4">
+              <div className="flex justify-center mb-2">
                 <div className="relative group">
-                   <div className="absolute inset-0 bg-blue-600/30 rounded-full blur-[45px] group-hover:bg-blue-600/50 transition-all duration-1000"></div>
+                   <div className="absolute inset-0 bg-blue-600/30 rounded-full blur-[40px] group-hover:bg-blue-600/50 transition-all duration-1000"></div>
                    <img 
                     src="https://i.ibb.co/rf28pYjw/rspc2.png" 
                     alt="NCR Logo" 
-                    className="w-36 h-36 md:w-48 md:h-48 object-contain relative z-10 animate-float drop-shadow-[0_25px_25px_rgba(0,0,0,0.4)] rounded-[3rem]"
+                    className="w-24 h-24 md:w-32 md:h-32 object-contain relative z-10 animate-float drop-shadow-[0_15px_15px_rgba(0,0,0,0.3)] rounded-[2.5rem]"
                   />
                 </div>
               </div>
               <div>
-                <h1 className="text-4xl md:text-5xl font-black font-header tracking-tighter text-slate-900 leading-none">NCR <span className="text-amber-500">PORTAL</span></h1>
-                <p className="text-slate-900 mt-4 font-black tracking-[0.25em] uppercase text-[11px] md:text-[12px] opacity-75">Regional Festival of Talents <span className="text-amber-500">2026</span></p>
+                <h1 className="text-3xl md:text-4xl font-black font-header tracking-tighter text-slate-900 leading-none">NCR <span className="text-amber-500">PORTAL</span></h1>
+                <p className="text-slate-900 mt-2 font-black tracking-[0.2em] uppercase text-[10px] md:text-[11px] opacity-75">Regional Festival of Talents <span className="text-amber-500">2026</span></p>
               </div>
             </div>
 
@@ -294,56 +294,56 @@ const App: React.FC = () => {
                 alert("Authorization Denied: " + err.message); 
                 setAuthLoading(false); 
               }
-            }} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 ml-5 opacity-70">Identity Key</label>
+            }} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 ml-4 opacity-70">Identity Key</label>
                 <div className="relative">
-                  <Mail className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-700" size={20} />
+                  <Mail className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-700" size={18} />
                   <input 
                     type="email" 
                     required 
                     placeholder="official@email.gov"
-                    className="w-full bg-white/60 border border-white/80 rounded-[2.5rem] pl-16 pr-8 py-6 outline-none focus:border-blue-700 focus:bg-white/95 focus:ring-[15px] focus:ring-blue-600/5 transition-all font-bold text-slate-900 shadow-sm text-sm placeholder:text-slate-400" 
+                    className="w-full bg-white/60 border border-white/80 rounded-[2rem] pl-14 pr-6 py-4 outline-none focus:border-blue-700 focus:bg-white/95 focus:ring-[12px] focus:ring-blue-600/5 transition-all font-bold text-slate-900 shadow-sm text-sm placeholder:text-slate-400" 
                     value={loginCreds.email} 
                     onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} 
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 ml-5 opacity-70">Security Token</label>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 ml-4 opacity-70">Security Token</label>
                 <div className="relative">
-                  <Key className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-700" size={20} />
+                  <Key className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-700" size={18} />
                   <input 
                     type="password" 
                     required 
                     placeholder="••••••••••••"
-                    className="w-full bg-white/60 border border-white/80 rounded-[2.5rem] pl-16 pr-8 py-6 outline-none focus:border-blue-700 focus:bg-white/95 focus:ring-[15px] focus:ring-blue-600/5 transition-all font-bold text-slate-900 shadow-sm text-sm" 
+                    className="w-full bg-white/60 border border-white/80 rounded-[2rem] pl-14 pr-6 py-4 outline-none focus:border-blue-700 focus:bg-white/95 focus:ring-[12px] focus:ring-blue-600/5 transition-all font-bold text-slate-900 shadow-sm text-sm" 
                     value={loginCreds.password} 
                     onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} 
                   />
                 </div>
               </div>
 
-              <button type="submit" className="w-full py-7 bg-blue-800 hover:bg-blue-900 text-white rounded-[2.5rem] font-black uppercase tracking-[0.25em] text-[12px] transition-all shadow-[0_25px_50px_-15px_rgba(30,58,138,0.5)] flex items-center justify-center gap-5 active:scale-95">
-                {isRegistering ? <Sparkles size={22} /> : <ShieldCheck size={22} />}
+              <button type="submit" className="w-full py-5 bg-blue-800 hover:bg-blue-900 text-white rounded-[2rem] font-black uppercase tracking-[0.2em] text-[11px] transition-all shadow-[0_20px_40px_-10px_rgba(30,58,138,0.5)] flex items-center justify-center gap-4 active:scale-95">
+                {isRegistering ? <Sparkles size={20} /> : <ShieldCheck size={20} />}
                 {isRegistering ? 'Setup Region' : 'Grant Entry'}
               </button>
             </form>
 
-            <div className="flex items-center justify-center gap-6">
+            <div className="flex items-center justify-center gap-4">
               <div className="h-px flex-1 bg-black/5"></div>
               {registrationEnabled && (
-                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[11px] font-black uppercase tracking-widest text-slate-900 hover:text-blue-800 transition-colors opacity-50 hover:opacity-100">
-                  {isRegistering ? 'Back to Login' : 'Initialize System'}
+                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-900 hover:text-blue-800 transition-colors opacity-50 hover:opacity-100">
+                  {isRegistering ? 'Login' : 'Initialize'}
                 </button>
               )}
               <div className="h-px flex-1 bg-black/5"></div>
             </div>
 
-            <div className="text-center pt-2">
-               <div className="flex items-center justify-center gap-3 text-slate-900/40 uppercase font-black text-[10px] tracking-[0.3em]">
-                 <RefreshCw size={14} className="animate-spin-slow" /> Official Regional Gateway
+            <div className="text-center pt-1">
+               <div className="flex items-center justify-center gap-2 text-slate-900/40 uppercase font-black text-[9px] tracking-[0.25em]">
+                 <RefreshCw size={12} className="animate-spin-slow" /> Official Regional Gateway
                </div>
             </div>
           </div>
@@ -407,6 +407,8 @@ const App: React.FC = () => {
         @keyframes loading { 0% { transform: translateX(-200%); } 100% { transform: translateX(400%); } }
         .animate-spin-slow { animation: spin 5s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </Router>
   );
