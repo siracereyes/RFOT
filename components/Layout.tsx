@@ -26,18 +26,27 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         lg:translate-x-0 lg:static lg:flex lg:flex-col
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-black font-header tracking-tighter">
-              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">NCR</span> <span className="text-[#FFD700]">2026</span>
-            </h1>
-            <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-[0.2em] font-black">
-              NATIONAL CAPITAL REGION
-            </p>
+        <div className="p-8 border-b border-slate-100 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img 
+                src="https://i.ibb.co/rf28pYjw/rspc2.png" 
+                alt="NCR Logo" 
+                className="w-12 h-12 object-contain rounded-xl shadow-sm border border-slate-100 bg-slate-50 p-1"
+              />
+              <div>
+                <h1 className="text-xl font-black font-header tracking-tighter leading-none">
+                  <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">NCR</span> <span className="text-[#FFD700]">2026</span>
+                </h1>
+                <p className="text-[8px] text-slate-400 mt-1 uppercase tracking-[0.1em] font-black">
+                  NATIONAL CAPITAL REGION
+                </p>
+              </div>
+            </div>
+            <button onClick={toggleMobileMenu} className="lg:hidden p-2 text-slate-400">
+              <X size={24} />
+            </button>
           </div>
-          <button onClick={toggleMobileMenu} className="lg:hidden p-2 text-slate-400">
-            <X size={24} />
-          </button>
         </div>
 
         <nav className="flex-1 p-6 space-y-2 overflow-y-auto no-scrollbar">
@@ -92,9 +101,16 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
             >
               <Menu size={20} />
             </button>
-            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 hidden sm:block">
-              {location.pathname === '/' ? 'System Overview' : location.pathname.substring(1).split('/').join(' • ').toUpperCase()}
-            </h2>
+            <div className="flex items-center gap-3">
+              <img 
+                src="https://i.ibb.co/rf28pYjw/rspc2.png" 
+                alt="NCR Logo" 
+                className="w-8 h-8 object-contain rounded-lg lg:hidden"
+              />
+              <h2 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 hidden sm:block">
+                {location.pathname === '/' ? 'System Overview' : location.pathname.substring(1).split('/').join(' • ').toUpperCase()}
+              </h2>
+            </div>
           </div>
 
           <div className="flex items-center gap-6">
