@@ -6,7 +6,7 @@ import Layout from './components/Layout';
 import AdminDashboard from './views/AdminDashboard';
 import JudgeDashboard from './views/JudgeDashboard';
 import PublicLeaderboard from './views/PublicLeaderboard';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldCheck, Mail, Key, Sparkles } from 'lucide-react';
 import { supabase } from './supabase';
 
 const App: React.FC = () => {
@@ -184,7 +184,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-4">
         <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading 2026 Core...</p>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading RFOT 2026 Core...</p>
       </div>
     );
   }
@@ -192,12 +192,35 @@ const App: React.FC = () => {
   return (
     <Router>
       {!currentUser ? (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-          <div className="bg-white p-10 rounded-[3rem] w-full max-w-md border border-slate-200 shadow-2xl space-y-8">
-            <div className="text-center">
-              <h1 className="text-4xl font-black font-header tracking-tight text-slate-900">RFOT <span className="text-blue-600">2026</span></h1>
-              <p className="text-slate-400 mt-2 font-medium tracking-widest uppercase text-xs">Regional Scoring Engine</p>
+        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 relative overflow-hidden">
+          {/* Main Background Image with 70% Transparency (30% Opacity) */}
+          <div 
+            className="absolute inset-0 z-0 bg-center bg-cover bg-no-repeat opacity-[0.3]"
+            style={{ backgroundImage: "url('https://i.ibb.co/rf28pYjw/rspc2.png')" }}
+          ></div>
+          
+          {/* Overlay gradient to ensure text readability */}
+          <div className="absolute inset-0 z-0 bg-gradient-to-b from-slate-900/60 via-slate-900/20 to-slate-950/80"></div>
+
+          {/* Login Card with 70% Transparency (30% Opacity) to be "almost see through" */}
+          <div className="bg-white/30 backdrop-blur-[40px] p-8 md:p-12 rounded-[3.5rem] w-full max-w-md border border-white/40 shadow-3xl space-y-10 relative z-10 animate-in fade-in zoom-in duration-700">
+            <div className="text-center space-y-4">
+              <div className="flex justify-center mb-6">
+                <div className="relative group">
+                   <div className="absolute inset-0 bg-blue-500/30 rounded-full blur-3xl group-hover:bg-blue-500/40 transition-all duration-700"></div>
+                   <img 
+                    src="https://i.ibb.co/rf28pYjw/rspc2.png" 
+                    alt="RFOT Logo" 
+                    className="w-32 h-32 md:w-40 md:h-40 object-contain relative z-10 animate-float drop-shadow-2xl rounded-3xl"
+                  />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-3xl md:text-4xl font-black font-header tracking-tight text-slate-900 leading-none">RFOT <span className="text-blue-700">2026</span></h1>
+                <p className="text-slate-900 mt-2 font-black tracking-[0.3em] uppercase text-[10px] md:text-xs">Regional Scoring Portal</p>
+              </div>
             </div>
+
             <form onSubmit={async (e) => {
               e.preventDefault();
               setAuthLoading(true);
@@ -206,27 +229,60 @@ const App: React.FC = () => {
                   ? await supabase.auth.signUp({ email: loginCreds.email, password: loginCreds.password, options: { data: { role: UserRole.SUPER_ADMIN, name: 'Main Admin' } } })
                   : await supabase.auth.signInWithPassword({ email: loginCreds.email, password: loginCreds.password });
                 if (error) throw error;
-              } catch (err: any) { alert(err.message); setAuthLoading(false); }
-            }} className="space-y-4">
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email</label>
-                <input type="email" required className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-slate-900" value={loginCreds.email} onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} />
+              } catch (err: any) { 
+                alert(err.message); 
+                setAuthLoading(false); 
+              }
+            }} className="space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-900 ml-4 drop-shadow-sm">Credential Access</label>
+                <div className="relative">
+                  <Mail className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-800" size={18} />
+                  <input 
+                    type="email" 
+                    required 
+                    placeholder="Email Address"
+                    className="w-full bg-white/40 border border-white/50 rounded-[2rem] pl-14 pr-6 py-5 outline-none focus:border-blue-600 focus:bg-white/80 focus:ring-4 focus:ring-blue-600/10 transition-all font-bold text-slate-900 shadow-sm placeholder:text-slate-600" 
+                    value={loginCreds.email} 
+                    onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} 
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Password</label>
-                <input type="password" required className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 mt-1 outline-none focus:border-blue-500 transition-all font-bold text-slate-900" value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-900 ml-4 drop-shadow-sm">Secure Key</label>
+                <div className="relative">
+                  <Key className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-800" size={18} />
+                  <input 
+                    type="password" 
+                    required 
+                    placeholder="Enter Password"
+                    className="w-full bg-white/40 border border-white/50 rounded-[2rem] pl-14 pr-6 py-5 outline-none focus:border-blue-600 focus:bg-white/80 focus:ring-4 focus:ring-blue-600/10 transition-all font-bold text-slate-900 shadow-sm placeholder:text-slate-600" 
+                    value={loginCreds.password} 
+                    onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} 
+                  />
+                </div>
               </div>
-              <button type="submit" className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-blue-100">
-                {isRegistering ? 'Initialize Platform' : 'Secure Sign In'}
+
+              <button type="submit" className="w-full py-6 bg-blue-700 hover:bg-blue-800 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-900/40 flex items-center justify-center gap-3 active:scale-[0.98]">
+                {isRegistering ? <Sparkles size={18} /> : <ShieldCheck size={18} />}
+                {isRegistering ? 'Initialize Platform' : 'Secure Authorization'}
               </button>
             </form>
-            {registrationEnabled && (
-              <div className="text-center pt-2">
-                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors">
-                  {isRegistering ? 'Return to Portal' : 'Administrator Setup'}
+
+            <div className="flex items-center justify-center gap-4">
+              <div className="h-px flex-1 bg-black/10"></div>
+              {registrationEnabled && (
+                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[9px] font-black uppercase tracking-widest text-slate-900 hover:text-blue-800 transition-colors">
+                  {isRegistering ? 'Back to Login' : 'System Setup'}
                 </button>
-              </div>
-            )}
+              )}
+              <div className="h-px flex-1 bg-black/10"></div>
+            </div>
+
+            <div className="text-center">
+               <p className="text-[8px] font-bold text-slate-900/80 uppercase tracking-widest italic">Protected by Regional Data Integrity Service</p>
+            </div>
           </div>
         </div>
       ) : (
