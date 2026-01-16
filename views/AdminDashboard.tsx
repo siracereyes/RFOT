@@ -1,10 +1,19 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Users, Plus, Lock, Unlock, Award, X, Edit3, Trash2, RefreshCw, ChevronRight, AlertTriangle, Loader2 } from 'lucide-react';
+import { Trophy, Users, Plus, Lock, Unlock, Award, X, Edit3, Trash2, RefreshCw, ChevronRight, AlertTriangle, Loader2, Bell, Info, Activity, Clock, ShieldCheck } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score, Round } from '../types';
 import { SDO_LIST } from '../constants';
-import { authClient } from '../supabase';
+import { authClient, supabase } from '../supabase';
+
+interface AdminActivity {
+  id: string;
+  type: 'event' | 'participant' | 'judge';
+  action: 'create' | 'update' | 'delete';
+  message: string;
+  timestamp: Date;
+  details?: string;
+}
 
 interface AdminDashboardProps {
   events: Event[];
@@ -46,6 +55,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showJudgeModal, setShowJudgeModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Notification States
+  const [activities, setActivities] = useState<AdminActivity[]>([]);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [toast, setToast] = useState<AdminActivity | null>(null);
 
   // Deletion Confirmation States
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -76,6 +91,62 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     events.find(e => e.id === deleteConfirmId),
     [events, deleteConfirmId]
   );
+
+  // REAL-TIME AUDIT LISTENER
+  useEffect(() => {
+    const pushActivity = (activity: AdminActivity) => {
+      setActivities(prev => [activity, ...prev].slice(0, 50));
+      setToast(activity);
+      if (!showActivityLog) setUnreadCount(c => c + 1);
+      setTimeout(() => setToast(prev => prev?.id === activity.id ? null : prev), 5000);
+    };
+
+    const channel = supabase
+      .channel('admin_audit_stream')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload) => {
+        let action: 'create' | 'update' | 'delete' = payload.eventType === 'INSERT' ? 'create' : payload.eventType === 'UPDATE' ? 'update' : 'delete';
+        const name = payload.new?.name || payload.old?.name || 'Unknown Contest';
+        pushActivity({
+          id: Math.random().toString(36).substr(2, 9),
+          type: 'event',
+          action,
+          message: `Contest ${action}d: ${name}`,
+          details: payload.eventType === 'UPDATE' ? `Sync parameters updated by regional office.` : `New technical category deployed.`,
+          timestamp: new Date()
+        });
+        onRefreshData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, (payload) => {
+        let action: 'create' | 'update' | 'delete' = payload.eventType === 'INSERT' ? 'create' : payload.eventType === 'UPDATE' ? 'update' : 'delete';
+        const name = payload.new?.name || payload.old?.name || 'Participant';
+        pushActivity({
+          id: Math.random().toString(36).substr(2, 9),
+          type: 'participant',
+          action,
+          message: `Entry ${action}d: ${name}`,
+          details: `Regional database for ${payload.new?.district || 'SDO'} synchronized.`,
+          timestamp: new Date()
+        });
+        onRefreshData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+        if (payload.new?.role === 'JUDGE' || payload.old?.role === 'JUDGE') {
+          let action: 'create' | 'update' | 'delete' = payload.eventType === 'INSERT' ? 'create' : payload.eventType === 'UPDATE' ? 'update' : 'delete';
+          pushActivity({
+            id: Math.random().toString(36).substr(2, 9),
+            type: 'judge',
+            action,
+            message: `Evaluator panel ${action}d: ${payload.new?.name || payload.old?.name}`,
+            details: `Access credentials for technical judging panel updated.`,
+            timestamp: new Date()
+          });
+          onRefreshData();
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [onRefreshData, showActivityLog]);
 
   useEffect(() => {
     if (editingEventId) {
@@ -124,7 +195,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setJudgeEmail('');
       setJudgePassword('');
       setAssignedEventId('');
-      alert("Judge account created successfully!");
     } catch (err: any) {
       console.error(err);
       alert("Error creating judge: " + err.message);
@@ -214,8 +284,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEventType(EventType.JUDGING); 
   };
 
+  const openActivityLog = () => {
+    setShowActivityLog(true);
+    setUnreadCount(0);
+  };
+
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-20 px-4">
+    <div className="space-y-8 max-w-7xl mx-auto pb-20 px-4 relative">
+      {/* Real-time Toast Notification */}
+      {toast && (
+        <div className="fixed top-28 right-8 z-[150] animate-in slide-in-from-right duration-500">
+          <div className="bg-white/80 backdrop-blur-xl border border-slate-200 p-6 rounded-[2rem] shadow-2xl flex items-center gap-5 max-w-sm">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white ${
+              toast.action === 'create' ? 'bg-emerald-500' : toast.action === 'delete' ? 'bg-red-500' : 'bg-blue-500'
+            }`}>
+              {toast.type === 'event' ? <Trophy size={20}/> : toast.type === 'judge' ? <ShieldCheck size={20}/> : <Users size={20}/>}
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-900 leading-tight">{toast.message}</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Just Now • Sync Active</p>
+            </div>
+            <button onClick={() => setToast(null)} className="p-2 text-slate-300 hover:text-slate-900 transition-all">
+              <X size={16}/>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-200 pb-8">
         <div className="w-full">
           <h1 className="text-3xl md:text-4xl font-black font-header tracking-tight text-slate-900">Management Console</h1>
@@ -238,27 +333,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
         
-        {activeTab === 'events' && (
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={openActivityLog}
+            className="p-4 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all relative group shadow-sm active:scale-95"
+          >
+            <Bell size={20} className={unreadCount > 0 ? 'animate-bounce' : ''} />
+            {unreadCount > 0 && (
+              <span className="absolute top-3 right-3 w-4 h-4 bg-blue-600 text-white text-[8px] font-black flex items-center justify-center rounded-full ring-4 ring-white">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+
           <button 
             onClick={() => { resetForm(); setShowWizard(true); }}
-            className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center gap-3 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+            className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center gap-3 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 whitespace-nowrap"
           >
             <Plus size={18} />
             Create Contest
           </button>
-        )}
 
-        <button 
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="p-4 text-slate-400 hover:text-blue-600 transition-all rounded-2xl hover:bg-slate-50"
-        >
-          <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
-        </button>
+          <button 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="p-4 text-slate-400 hover:text-blue-600 transition-all rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100"
+          >
+            <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
       {activeTab === 'events' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-700">
           {events.map((event) => (
             <div key={event.id} className="bg-white border border-slate-200 rounded-[2.5rem] p-8 space-y-6 hover:shadow-xl transition-all group">
               <div className="flex justify-between items-start">
@@ -302,7 +409,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {activeTab === 'judges' && (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-in fade-in duration-700">
           <div className="flex justify-between items-center">
              <h2 className="text-xl font-black font-header text-slate-900">Panel of Evaluators</h2>
              <button onClick={() => setShowJudgeModal(true)} className="px-6 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Enroll Judge</button>
@@ -322,6 +429,55 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button onClick={() => onRemoveJudge(judge.id)} className="text-red-300 hover:text-red-500"><Trash2 size={18}/></button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Activity Log Drawer */}
+      {showActivityLog && (
+        <div className="fixed inset-0 z-[200] flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowActivityLog(false)} />
+          <div className="w-full max-w-md bg-white h-full relative shadow-2xl flex flex-col animate-in slide-in-from-right duration-500">
+            <div className="p-10 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+               <div>
+                  <h3 className="text-2xl font-black font-header text-slate-900 uppercase tracking-tight">Regional Audit</h3>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Administrative Sync History</p>
+               </div>
+               <button onClick={() => setShowActivityLog(false)} className="p-4 text-slate-400 hover:text-slate-900 transition-all rounded-full hover:bg-white border border-transparent hover:border-slate-100"><X size={24}/></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-10 space-y-8 no-scrollbar">
+              {activities.length > 0 ? activities.map(act => (
+                <div key={act.id} className="flex gap-6 items-start group">
+                   <div className={`w-14 h-14 rounded-3xl flex items-center justify-center shrink-0 shadow-sm border ${
+                     act.action === 'create' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                     act.action === 'delete' ? 'bg-red-50 text-red-600 border-red-100' : 
+                     'bg-blue-50 text-blue-600 border-blue-100'
+                   }`}>
+                     {act.type === 'event' ? <Trophy size={20}/> : act.type === 'judge' ? <ShieldCheck size={20}/> : <Users size={20}/>}
+                   </div>
+                   <div className="space-y-2 pt-1">
+                      <p className="text-sm font-black text-slate-900 leading-tight">{act.message}</p>
+                      <p className="text-xs text-slate-400 leading-relaxed font-medium">{act.details}</p>
+                      <div className="flex items-center gap-2 pt-1">
+                         <Clock size={12} className="text-slate-300" />
+                         <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                           {act.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                         </span>
+                      </div>
+                   </div>
+                </div>
+              )) : (
+                <div className="flex flex-col items-center justify-center h-full text-center space-y-6 opacity-30">
+                  <Activity size={64} className="text-slate-200" />
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Listening for administrative sync...</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-10 border-t border-slate-100 text-center bg-slate-50/30">
+               <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Official RFOT Regional Audit Loop 2026</p>
+            </div>
           </div>
         </div>
       )}
