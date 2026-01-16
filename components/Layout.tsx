@@ -28,11 +28,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
       `}>
         <div className="p-8 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-black font-header bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent tracking-tighter">
-              RFOT 2026
+            <h1 className="text-3xl font-black font-header tracking-tighter">
+              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">NCR</span> <span className="text-[#FFD700]">2026</span>
             </h1>
-            <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-[0.3em] font-black">
-              REGIONAL SCORING
+            <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-[0.2em] font-black">
+              NATIONAL CAPITAL REGION
             </p>
           </div>
           <button onClick={toggleMobileMenu} className="lg:hidden p-2 text-slate-400">

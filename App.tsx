@@ -184,7 +184,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-4">
         <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading RFOT 2026 Core...</p>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading NCR Portal Core...</p>
       </div>
     );
   }
@@ -202,8 +202,8 @@ const App: React.FC = () => {
           {/* Overlay gradient to ensure text readability */}
           <div className="absolute inset-0 z-0 bg-gradient-to-b from-slate-900/60 via-slate-900/20 to-slate-950/80"></div>
 
-          {/* Login Card with 70% Transparency (30% Opacity) to be "almost see through" */}
-          <div className="bg-white/30 backdrop-blur-[40px] p-8 md:p-12 rounded-[3.5rem] w-full max-w-md border border-white/40 shadow-3xl space-y-10 relative z-10 animate-in fade-in zoom-in duration-700">
+          {/* Login Card with 70% Transparency (bg-white/30) */}
+          <div className="bg-white/30 backdrop-blur-[40px] p-8 md:p-12 rounded-[3.5rem] w-full max-w-md border border-white/20 shadow-3xl space-y-10 relative z-10 animate-in fade-in zoom-in duration-700">
             <div className="text-center space-y-4">
               <div className="flex justify-center mb-6">
                 <div className="relative group">
@@ -211,13 +211,13 @@ const App: React.FC = () => {
                    <img 
                     src="https://i.ibb.co/rf28pYjw/rspc2.png" 
                     alt="RFOT Logo" 
-                    className="w-32 h-32 md:w-40 md:h-40 object-contain relative z-10 animate-float drop-shadow-2xl rounded-3xl"
+                    className="w-32 h-32 md:w-40 md:h-40 object-contain relative z-10 animate-float drop-shadow-2xl rounded-[2rem]"
                   />
                 </div>
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-black font-header tracking-tight text-slate-900 leading-none">RFOT <span className="text-blue-700">2026</span></h1>
-                <p className="text-slate-900 mt-2 font-black tracking-[0.3em] uppercase text-[10px] md:text-xs">Regional Scoring Portal</p>
+                <h1 className="text-3xl md:text-4xl font-black font-header tracking-tight text-slate-900 leading-none">RFOT <span className="text-[#FFD700]">2026</span></h1>
+                <p className="text-slate-900 mt-2 font-black tracking-[0.1em] uppercase text-[10px] md:text-xs">National Capital Region Portal</p>
               </div>
             </div>
 
