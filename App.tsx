@@ -6,7 +6,7 @@ import Layout from './components/Layout';
 import AdminDashboard from './views/AdminDashboard';
 import JudgeDashboard from './views/JudgeDashboard';
 import PublicLeaderboard from './views/PublicLeaderboard';
-import { Loader2, ShieldCheck, Mail, Key, Sparkles, RefreshCw } from 'lucide-react';
+import { Loader2, ShieldCheck, Mail, Key, Sparkles, RefreshCw, ChevronRight } from 'lucide-react';
 import { supabase } from './supabase';
 
 const App: React.FC = () => {
@@ -19,7 +19,9 @@ const App: React.FC = () => {
   const [scores, setScores] = useState<Score[]>([]);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
+  
   const initRef = useRef(false);
+  const isResolvingRef = useRef(false);
 
   const mapEvent = (db: any): Event => ({
     id: db.id,
@@ -79,17 +81,16 @@ const App: React.FC = () => {
       if (settingsData.status === 'fulfilled' && settingsData.value) setRegistrationEnabled(settingsData.value.value === 'true');
       
     } catch (e) {
-      console.error("Data fetch error:", e);
+      console.error("Critical: Data fetch failed", e);
     } finally {
       setDataLoading(false);
     }
   }, []);
 
   const resolveProfile = async (authSession: any) => {
-    if (!authSession?.user) {
-      setCurrentUser(null);
-      return null;
-    }
+    if (!authSession?.user || isResolvingRef.current) return null;
+    isResolvingRef.current = true;
+    
     try {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -99,16 +100,16 @@ const App: React.FC = () => {
       
       if (profileError) throw profileError;
 
+      let resolvedUser: User;
+
       if (profile) {
-        const mapped = mapUser(profile);
-        if (!mapped.email) mapped.email = authSession.user.email || '';
-        setCurrentUser(mapped);
-        return mapped;
+        resolvedUser = mapUser(profile);
+        if (!resolvedUser.email) resolvedUser.email = authSession.user.email || '';
       } else {
         const meta = authSession.user.user_metadata;
         const assignedRole = (meta?.role || (isRegistering ? UserRole.SUPER_ADMIN : UserRole.JUDGE)).toUpperCase();
         
-        const fallbackUser: User = {
+        resolvedUser = {
           id: authSession.user.id,
           name: meta?.name || authSession.user.email?.split('@')[0] || 'User',
           role: assignedRole as UserRole,
@@ -116,23 +117,32 @@ const App: React.FC = () => {
           assignedEventId: meta?.assignedEventId
         };
         
-        setCurrentUser(fallbackUser);
-        
         supabase.from('profiles').upsert([{
           id: authSession.user.id,
-          name: fallbackUser.name,
-          role: fallbackUser.role,
-          assigned_event_id: fallbackUser.assignedEventId
+          name: resolvedUser.name,
+          role: resolvedUser.role,
+          assigned_event_id: resolvedUser.assignedEventId
         }]).then(({ error }) => {
-          if (error) console.error("Profile sync failed:", error);
+          if (error) console.error("Auto-profile-sync failed", error);
         });
-
-        return fallbackUser;
       }
+
+      setCurrentUser(resolvedUser);
+      return resolvedUser;
     } catch (err) {
-      console.error("Profile resolution error:", err);
-      setCurrentUser(null);
-      return null;
+      console.error("Profile resolution failed, fallback to metadata", err);
+      const meta = authSession?.user?.user_metadata;
+      const fallback: User = {
+        id: authSession?.user?.id,
+        name: meta?.name || authSession?.user?.email?.split('@')[0] || 'Authenticated User',
+        role: (meta?.role || UserRole.JUDGE).toUpperCase() as UserRole,
+        email: authSession?.user?.email || '',
+        assignedEventId: meta?.assignedEventId
+      };
+      setCurrentUser(fallback);
+      return fallback;
+    } finally {
+      isResolvingRef.current = false;
     }
   };
 
@@ -140,37 +150,35 @@ const App: React.FC = () => {
     if (initRef.current) return;
     initRef.current = true;
 
-    // Fail-safe to ensure the app is never stuck on a black screen
-    const failSafe = setTimeout(() => {
+    const globalTimeout = setTimeout(() => {
       setAuthLoading(false);
-    }, 4500);
+    }, 6000);
 
-    const initialize = async () => {
+    const performInit = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        
         if (session) {
           await resolveProfile(session);
+          fetchAllData();
         }
       } catch (err) {
-        console.error("Initialization error:", err);
+        console.error("Initialization process crashed", err);
       } finally {
         setAuthLoading(false);
-        clearTimeout(failSafe);
-        fetchAllData();
+        clearTimeout(globalTimeout);
       }
     };
 
-    initialize();
+    performInit();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-        setAuthLoading(true);
-        try {
+        if (session) {
           await resolveProfile(session);
-          await fetchAllData();
-        } finally {
-          setAuthLoading(false);
+          fetchAllData();
         }
+        setAuthLoading(false);
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setUsers([]);
@@ -182,7 +190,7 @@ const App: React.FC = () => {
 
     return () => { 
       subscription.unsubscribe();
-      clearTimeout(failSafe);
+      clearTimeout(globalTimeout);
     };
   }, [fetchAllData]);
 
@@ -191,7 +199,8 @@ const App: React.FC = () => {
     try {
       await supabase.auth.signOut();
     } catch (err) {
-      console.error("Sign out error:", err);
+      console.error("Sign out process error", err);
+      setCurrentUser(null);
       setAuthLoading(false);
     }
   };
@@ -217,22 +226,22 @@ const App: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-6">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#fdfdfe] gap-8">
         <div className="relative">
-          <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full"></div>
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin relative z-10" />
+          <div className="absolute inset-0 bg-blue-600/10 blur-[50px] rounded-full scale-150"></div>
+          <div className="relative z-10 p-6 bg-white rounded-3xl border border-slate-100 shadow-xl">
+             <Loader2 className="w-10 h-10 text-blue-700 animate-spin" />
+          </div>
         </div>
         <div className="flex flex-col items-center gap-2 text-center">
-          <p className="text-slate-900 font-black uppercase tracking-[0.25em] text-[11px]">Authorized Entry Pending</p>
-          <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px] animate-pulse">Establishing Secure Uplink • RFOT 2026</p>
+          <p className="text-slate-900 font-black uppercase tracking-[0.4em] text-[13px] animate-pulse">Establishing Session</p>
+          <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">National Capital Region • Portal</p>
         </div>
-        
-        {/* Fail-safe manual bypass */}
         <button 
           onClick={() => setAuthLoading(false)}
-          className="mt-8 px-6 py-2 border border-slate-200 rounded-full text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all"
+          className="mt-12 px-10 py-4 bg-white border border-slate-200 rounded-full text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 hover:text-blue-700 hover:border-blue-200 transition-all shadow-sm flex items-center gap-3"
         >
-          Force Bypass
+          Direct Access <ChevronRight size={14} />
         </button>
       </div>
     );
@@ -241,28 +250,28 @@ const App: React.FC = () => {
   return (
     <Router>
       {!currentUser ? (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 relative overflow-hidden">
+        <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617] relative overflow-hidden">
           <div 
-            className="absolute inset-0 z-0 bg-center bg-cover bg-no-repeat opacity-[0.25] transition-opacity duration-1000"
+            className="absolute inset-0 z-0 bg-center bg-cover bg-no-repeat opacity-[0.15] scale-105"
             style={{ backgroundImage: "url('https://i.ibb.co/rf28pYjw/rspc2.png')" }}
           ></div>
-          <div className="absolute inset-0 z-0 bg-gradient-to-b from-slate-900/70 via-slate-900/30 to-slate-950/90"></div>
+          <div className="absolute inset-0 z-0 bg-gradient-to-tr from-slate-950 via-slate-950/40 to-slate-950"></div>
 
-          <div className="bg-white/40 backdrop-blur-[45px] p-8 md:p-12 rounded-[3.5rem] w-full max-w-md border border-white/20 shadow-3xl space-y-10 relative z-10 animate-in fade-in zoom-in duration-700">
-            <div className="text-center space-y-4">
+          <div className="bg-white/45 backdrop-blur-[55px] p-8 md:p-14 rounded-[3.5rem] w-full max-w-md border border-white/20 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.6)] space-y-12 relative z-10 animate-in fade-in zoom-in-95 duration-1000">
+            <div className="text-center space-y-6">
               <div className="flex justify-center mb-6">
                 <div className="relative group">
-                   <div className="absolute inset-0 bg-blue-500/40 rounded-full blur-3xl group-hover:bg-blue-500/50 transition-all duration-700"></div>
+                   <div className="absolute inset-0 bg-blue-600/30 rounded-full blur-[45px] group-hover:bg-blue-600/50 transition-all duration-1000"></div>
                    <img 
                     src="https://i.ibb.co/rf28pYjw/rspc2.png" 
-                    alt="RFOT Logo" 
-                    className="w-32 h-32 md:w-40 md:h-40 object-contain relative z-10 animate-float drop-shadow-2xl rounded-[2.5rem]"
+                    alt="NCR Logo" 
+                    className="w-36 h-36 md:w-48 md:h-48 object-contain relative z-10 animate-float drop-shadow-[0_25px_25px_rgba(0,0,0,0.4)] rounded-[3rem]"
                   />
                 </div>
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-black font-header tracking-tight text-slate-900 leading-none">NCR <span className="text-blue-700">PORTAL</span></h1>
-                <p className="text-slate-800 mt-2 font-black tracking-[0.15em] uppercase text-[10px] md:text-xs">Regional Festival of Talents 2026</p>
+                <h1 className="text-4xl md:text-5xl font-black font-header tracking-tighter text-slate-900 leading-none">NCR <span className="text-amber-500">PORTAL</span></h1>
+                <p className="text-slate-900 mt-4 font-black tracking-[0.25em] uppercase text-[11px] md:text-[12px] opacity-75">Regional Festival of Talents <span className="text-amber-500">2026</span></p>
               </div>
             </div>
 
@@ -271,63 +280,70 @@ const App: React.FC = () => {
               setAuthLoading(true);
               try {
                 const { error } = isRegistering 
-                  ? await supabase.auth.signUp({ email: loginCreds.email, password: loginCreds.password, options: { data: { role: UserRole.SUPER_ADMIN, name: 'NCR Admin' } } })
-                  : await supabase.auth.signInWithPassword({ email: loginCreds.email, password: loginCreds.password });
+                  ? await supabase.auth.signUp({ 
+                      email: loginCreds.email, 
+                      password: loginCreds.password, 
+                      options: { data: { role: UserRole.SUPER_ADMIN, name: 'Regional Admin' } } 
+                    })
+                  : await supabase.auth.signInWithPassword({ 
+                      email: loginCreds.email, 
+                      password: loginCreds.password 
+                    });
                 if (error) throw error;
               } catch (err: any) { 
-                alert(err.message); 
+                alert("Authorization Denied: " + err.message); 
                 setAuthLoading(false); 
               }
-            }} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-900 ml-4">Credential Identity</label>
+            }} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 ml-5 opacity-70">Identity Key</label>
                 <div className="relative">
-                  <Mail className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-700" size={18} />
+                  <Mail className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-700" size={20} />
                   <input 
                     type="email" 
                     required 
-                    placeholder="Email Address"
-                    className="w-full bg-white/50 border border-white/60 rounded-[2rem] pl-14 pr-6 py-5 outline-none focus:border-blue-600 focus:bg-white/90 focus:ring-4 focus:ring-blue-600/10 transition-all font-bold text-slate-900 shadow-sm" 
+                    placeholder="official@email.gov"
+                    className="w-full bg-white/60 border border-white/80 rounded-[2.5rem] pl-16 pr-8 py-6 outline-none focus:border-blue-700 focus:bg-white/95 focus:ring-[15px] focus:ring-blue-600/5 transition-all font-bold text-slate-900 shadow-sm text-sm placeholder:text-slate-400" 
                     value={loginCreds.email} 
                     onChange={e => setLoginCreds({...loginCreds, email: e.target.value})} 
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-900 ml-4">Access Token</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 ml-5 opacity-70">Security Token</label>
                 <div className="relative">
-                  <Key className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-700" size={18} />
+                  <Key className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-700" size={20} />
                   <input 
                     type="password" 
                     required 
-                    placeholder="Enter Security Key"
-                    className="w-full bg-white/50 border border-white/60 rounded-[2rem] pl-14 pr-6 py-5 outline-none focus:border-blue-600 focus:bg-white/90 focus:ring-4 focus:ring-blue-600/10 transition-all font-bold text-slate-900 shadow-sm" 
+                    placeholder="••••••••••••"
+                    className="w-full bg-white/60 border border-white/80 rounded-[2.5rem] pl-16 pr-8 py-6 outline-none focus:border-blue-700 focus:bg-white/95 focus:ring-[15px] focus:ring-blue-600/5 transition-all font-bold text-slate-900 shadow-sm text-sm" 
                     value={loginCreds.password} 
                     onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} 
                   />
                 </div>
               </div>
 
-              <button type="submit" className="w-full py-6 bg-blue-700 hover:bg-blue-800 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-900/40 flex items-center justify-center gap-3 active:scale-[0.98]">
-                {isRegistering ? <Sparkles size={18} /> : <ShieldCheck size={18} />}
-                {isRegistering ? 'Initialize Environment' : 'Verify Authorization'}
+              <button type="submit" className="w-full py-7 bg-blue-800 hover:bg-blue-900 text-white rounded-[2.5rem] font-black uppercase tracking-[0.25em] text-[12px] transition-all shadow-[0_25px_50px_-15px_rgba(30,58,138,0.5)] flex items-center justify-center gap-5 active:scale-95">
+                {isRegistering ? <Sparkles size={22} /> : <ShieldCheck size={22} />}
+                {isRegistering ? 'Setup Region' : 'Grant Entry'}
               </button>
             </form>
 
-            <div className="flex items-center justify-center gap-4">
-              <div className="h-px flex-1 bg-black/10"></div>
+            <div className="flex items-center justify-center gap-6">
+              <div className="h-px flex-1 bg-black/5"></div>
               {registrationEnabled && (
-                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[9px] font-black uppercase tracking-widest text-slate-900 hover:text-blue-900 transition-colors">
-                  {isRegistering ? 'Cancel' : 'System Setup'}
+                <button onClick={() => setIsRegistering(!isRegistering)} className="text-[11px] font-black uppercase tracking-widest text-slate-900 hover:text-blue-800 transition-colors opacity-50 hover:opacity-100">
+                  {isRegistering ? 'Back to Login' : 'Initialize System'}
                 </button>
               )}
-              <div className="h-px flex-1 bg-black/10"></div>
+              <div className="h-px flex-1 bg-black/5"></div>
             </div>
 
-            <div className="text-center pt-4">
-               <div className="flex items-center justify-center gap-2 text-slate-900/60 uppercase font-black text-[8px] tracking-[0.2em]">
-                 <RefreshCw size={10} /> Live Data Sync Active
+            <div className="text-center pt-2">
+               <div className="flex items-center justify-center gap-3 text-slate-900/40 uppercase font-black text-[10px] tracking-[0.3em]">
+                 <RefreshCw size={14} className="animate-spin-slow" /> Official Regional Gateway
                </div>
             </div>
           </div>
@@ -335,8 +351,8 @@ const App: React.FC = () => {
       ) : (
         <Layout user={currentUser} onLogout={handleLogout}>
           {dataLoading && (
-            <div className="fixed top-0 left-0 w-full h-1 bg-blue-50 z-[100] overflow-hidden">
-              <div className="h-full bg-blue-600 animate-[loading_1.5s_ease-in-out_infinite] w-1/3 shadow-[0_0_10px_rgba(37,99,235,0.5)]"></div>
+            <div className="fixed top-0 left-0 w-full h-[4px] bg-blue-50/30 z-[100] overflow-hidden">
+              <div className="h-full bg-blue-700 animate-[loading_1.2s_ease-in-out_infinite] w-1/4 shadow-[0_0_20px_rgba(29,78,216,1)]"></div>
             </div>
           )}
           <Routes>
@@ -365,9 +381,17 @@ const App: React.FC = () => {
             <Route path="/events" element={<Navigate to="/" />} />
             <Route path="/scoring" element={<JudgeDashboard events={events} participants={participants} judge={currentUser} scores={scores} onSubmitScore={async (s) => {
               const event = events.find(e => e.id === s.eventId);
-              if (event?.isLocked) throw new Error("This category is already finalized.");
+              if (event?.isLocked) throw new Error("This contest is currently locked for review.");
               const { data: existing } = await supabase.from('scores').select('id').eq('judge_id', s.judgeId).eq('participant_id', s.participantId).maybeSingle();
-              const payload: any = { judge_id: s.judgeId, participant_id: s.participantId, event_id: s.eventId, criteria_scores: s.criteriaScores, deductions: s.deductions, total_score: s.totalScore, critique: s.critique };
+              const payload: any = { 
+                judge_id: s.judgeId, 
+                participant_id: s.participantId, 
+                event_id: s.eventId, 
+                criteria_scores: s.criteriaScores, 
+                deductions: s.deductions, 
+                total_score: s.totalScore, 
+                critique: s.critique 
+              };
               if (existing?.id) payload.id = existing.id;
               const { data, error } = await supabase.from('scores').upsert(payload).select();
               if (error) throw error;
@@ -379,7 +403,11 @@ const App: React.FC = () => {
           </Routes>
         </Layout>
       )}
-      <style>{`@keyframes loading { 0% { transform: translateX(-150%); } 100% { transform: translateX(350%); } }`}</style>
+      <style>{`
+        @keyframes loading { 0% { transform: translateX(-200%); } 100% { transform: translateX(400%); } }
+        .animate-spin-slow { animation: spin 5s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </Router>
   );
 };

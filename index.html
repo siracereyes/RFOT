@@ -4,18 +4,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RFOT 2026 | Regional Festival of Talents</title>
+    <title>NCR Portal | RFOT 2026</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
       :root {
-        --primary-glow: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.05), transparent);
-        --secondary-glow: radial-gradient(circle at 80% 80%, rgba(99, 102, 241, 0.05), transparent);
+        --primary-glow: radial-gradient(circle at 10% 10%, rgba(29, 78, 216, 0.08), transparent);
+        --secondary-glow: radial-gradient(circle at 90% 90%, rgba(30, 64, 175, 0.08), transparent);
       }
       body {
         font-family: 'Inter', sans-serif;
-        background: #f8fafc; /* slate-50 */
-        color: #0f172a; /* slate-900 */
+        background: #fdfdfe; /* Pure Professional White */
+        color: #0f172a; 
         min-height: 100vh;
         overflow-x: hidden;
       }
@@ -25,49 +25,44 @@
         z-index: -1;
         width: 100vw;
         height: 100vh;
-        background: var(--primary-glow);
+        background: var(--primary-glow), var(--secondary-glow);
         top: 0;
         left: 0;
         pointer-events: none;
+      }
+      .grid-pattern {
+        background-image: radial-gradient(rgba(0,0,0,0.03) 1px, transparent 1px);
+        background-size: 30px 30px;
       }
       .font-header {
         font-family: 'Plus Jakarta Sans', sans-serif;
       }
       .glass {
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(226, 232, 240, 0.8);
-      }
-      .glass-card {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.04), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+        background: rgba(255, 255, 255, 0.75);
+        backdrop-filter: blur(30px);
+        -webkit-backdrop-filter: blur(30px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
       }
       @keyframes float {
         0% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
+        50% { transform: translateY(-8px); }
         100% { transform: translateY(0px); }
       }
       .animate-float {
         animation: float 6s ease-in-out infinite;
       }
       ::-webkit-scrollbar {
-        width: 8px;
+        width: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #f1f5f9;
+        background: #f8fafc;
       }
       ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
+        background: #e2e8f0;
         border-radius: 10px;
-        border: 2px solid #f1f5f9;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-      }
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
+        background: #cbd5e1;
       }
     </style>
   <script type="importmap">
@@ -86,7 +81,7 @@
 }
 </script>
 </head>
-  <body>
+  <body class="grid-pattern">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
   </body>
