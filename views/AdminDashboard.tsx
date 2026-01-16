@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Users, Plus, Lock, Unlock, Award, UserPlus, X, Edit3, Trash2, Loader2, Save, Hash, RefreshCw, BookOpen, Music, Microscope, Layout, Sparkles, AlertCircle, Mail, Key, UserCheck, ChevronRight, BarChart3, Medal, TrendingUp } from 'lucide-react';
+import { Trophy, Users, Plus, Lock, Unlock, Award, X, Edit3, Trash2, RefreshCw, ChevronRight } from 'lucide-react';
 import WeightingWizard from '../components/WeightingWizard';
 import { Event, EventType, Criterion, Participant, User, UserRole, Score, Round } from '../types';
 import { SDO_LIST } from '../constants';
@@ -28,8 +28,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   participants, 
   users, 
   scores, 
-  registrationEnabled,
-  onToggleRegistration,
   onAddEvent, 
   onUpdateEvent, 
   onAddParticipant, 
@@ -39,7 +37,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onRemoveJudge,
   onRefreshData
 }) => {
-  const [activeTab, setActiveTab] = useState<'events' | 'judges' | 'overall' | 'system'>('events');
+  const [activeTab, setActiveTab] = useState<'events' | 'judges'>('events');
   const [showWizard, setShowWizard] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showEnrollModal, setShowEnrollModal] = useState<string | null>(null);
@@ -67,67 +65,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     users.filter(u => u.role === UserRole.JUDGE || u.role?.toString().toUpperCase() === 'JUDGE'),
     [users]
   );
-
-  // --- OVERALL STANDING CALCULATION LOGIC ---
-  const overallStandings = useMemo(() => {
-    if (events.length === 0) return [];
-
-    // 1. Calculate Ranks for each SDO in each event
-    const matrix: Record<string, Record<string, number>> = {}; // district -> eventId -> rank
-    const SDO_COUNT = SDO_LIST.length;
-
-    events.forEach(event => {
-      const eventScores = scores.filter(s => s.eventId === event.id);
-      const eventParticipants = participants.filter(p => p.eventId === event.id);
-
-      // Map SDO to its average score in this event
-      const sdoAverages = SDO_LIST.map(district => {
-        const districtParts = eventParticipants.filter(p => p.district === district);
-        if (districtParts.length === 0) return { district, score: -1 }; // Non-participant
-
-        const pIds = districtParts.map(p => p.id);
-        const pScores = eventScores.filter(s => pIds.includes(s.participantId));
-        
-        const avg = pScores.length > 0 
-          ? pScores.reduce((sum, s) => sum + s.totalScore, 0) / pScores.length 
-          : 0;
-        
-        return { district, score: avg };
-      });
-
-      // Rank the participating SDOs
-      const participantsOnly = sdoAverages
-        .filter(s => s.score !== -1)
-        .sort((a, b) => b.score - a.score);
-
-      SDO_LIST.forEach(district => {
-        if (!matrix[district]) matrix[district] = {};
-        
-        const perf = sdoAverages.find(s => s.district === district);
-        if (!perf || perf.score === -1) {
-          matrix[district][event.id] = SDO_COUNT; // Assign lowest rank for non-participation
-        } else {
-          // Find index in sorted list
-          const rankIndex = participantsOnly.findIndex(p => p.district === district);
-          matrix[district][event.id] = rankIndex + 1;
-        }
-      });
-    });
-
-    // 2. Aggregate average rank for each SDO
-    const finalStandings = SDO_LIST.map(district => {
-      const eventRanks = Object.values(matrix[district]);
-      const meanRank = eventRanks.reduce((sum, r) => sum + r, 0) / Math.max(1, events.length);
-      return {
-        district,
-        eventRanks: matrix[district],
-        meanRank: Number(meanRank.toFixed(2))
-      };
-    });
-
-    // 3. Sort by lowest mean rank (Lower is better)
-    return finalStandings.sort((a, b) => a.meanRank - b.meanRank);
-  }, [events, scores, participants]);
 
   useEffect(() => {
     if (editingEventId) {
@@ -269,8 +206,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex gap-8 mt-8 overflow-x-auto no-scrollbar">
             {[
               { id: 'events', label: 'Contests', icon: <Trophy size={16} /> },
-              { id: 'judges', label: 'Judges', icon: <Users size={16} /> },
-              { id: 'overall', label: 'Overall Standing', icon: <Medal size={16} /> }
+              { id: 'judges', label: 'Judges', icon: <Users size={16} /> }
             ].map((t) => (
               <button 
                 key={t.id} 
@@ -368,98 +304,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button onClick={() => onRemoveJudge(judge.id)} className="text-red-300 hover:text-red-500"><Trash2 size={18}/></button>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'overall' && (
-        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-black font-header text-slate-900">RFOT 2026 Overall Standing</h2>
-              <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mt-1">Matrix of Regional Excellence • All Districts</p>
-            </div>
-            <div className="px-5 py-2.5 bg-amber-50 text-amber-600 rounded-full border border-amber-100 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-              <TrendingUp size={14} /> Rank-Average Based Standings
-            </div>
-          </div>
-
-          <div className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden relative">
-            <div className="overflow-x-auto no-scrollbar">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-50/50">
-                  <tr>
-                    <th className="sticky left-0 z-20 bg-slate-50 px-8 py-10 text-[10px] font-black uppercase tracking-widest text-slate-400 border-r border-slate-100 min-w-[240px]">District (SDO)</th>
-                    {events.map(event => (
-                      <th key={event.id} className="px-6 py-10 text-[10px] font-black uppercase tracking-widest text-slate-400 border-r border-slate-100 min-w-[120px] text-center">
-                        <div className="max-w-[100px] mx-auto truncate" title={event.name}>{event.name}</div>
-                      </th>
-                    ))}
-                    <th className="px-8 py-10 text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50/30 text-center min-w-[140px]">Mean Rank</th>
-                    <th className="px-8 py-10 text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-50/30 text-center min-w-[140px]">Final Placement</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {overallStandings.map((res, i) => (
-                    <tr key={res.district} className="hover:bg-slate-50/30 transition-all group">
-                      <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 px-8 py-6 border-r border-slate-100">
-                        <div className="flex items-center gap-4">
-                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] ${
-                             i === 0 ? 'bg-amber-500 text-white' : i === 1 ? 'bg-slate-400 text-white' : i === 2 ? 'bg-orange-400 text-white' : 'bg-slate-100 text-slate-400'
-                           }`}>
-                             {i + 1}
-                           </div>
-                           <span className="text-sm font-black text-slate-900">{res.district}</span>
-                        </div>
-                      </td>
-                      {events.map(event => {
-                        const r = res.eventRanks[event.id];
-                        return (
-                          <td key={event.id} className="px-6 py-6 text-center border-r border-slate-100">
-                            <span className={`text-sm font-black tabular-nums ${
-                              r === 1 ? 'text-amber-500' : r === 16 ? 'text-slate-200' : 'text-slate-400'
-                            }`}>
-                              {r === 16 ? '—' : r}
-                            </span>
-                          </td>
-                        );
-                      })}
-                      <td className="px-8 py-6 text-center bg-blue-50/10 font-black text-blue-600 text-lg tabular-nums">
-                        {res.meanRank}
-                      </td>
-                      <td className="px-8 py-6 text-center bg-amber-50/10">
-                        <div className="flex items-center justify-center gap-2">
-                           {i === 0 && <Medal className="text-amber-500" size={20} />}
-                           {i === 1 && <Medal className="text-slate-400" size={20} />}
-                           {i === 2 && <Medal className="text-orange-500" size={20} />}
-                           <span className={`font-black text-sm uppercase tracking-widest ${i < 3 ? 'text-amber-600' : 'text-slate-400'}`}>
-                             {i === 0 ? 'Champion' : i === 1 ? '2nd Place' : i === 2 ? '3rd Place' : `${i + 1}th`}
-                           </span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          
-          <div className="bg-slate-50/50 p-8 rounded-[2rem] border border-slate-100">
-            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-4">Technical Formula</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-600 uppercase">Non-Participation Rule</p>
-                <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-wider">
-                  Districts not participating in a category are automatically assigned Rank 16 (lowest standing) for that event to maintain mathematical consistency across all regional assessments.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-600 uppercase">Mean Rank Determination</p>
-                <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-wider">
-                  The Overall Champion is the district with the lowest Mean Rank average across all contested categories.
-                </p>
-              </div>
-            </div>
           </div>
         </div>
       )}
